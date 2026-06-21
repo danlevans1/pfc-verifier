@@ -176,3 +176,22 @@ def test_root_returns_200():
 def test_root_contains_title():
     r = client.get("/")
     assert "PFC Verifier" in r.text
+
+
+def test_root_has_dynamic_checks_area():
+    """Page must contain the checks container that JS populates dynamically."""
+    r = client.get("/")
+    assert 'id="checks"' in r.text
+
+
+def test_root_has_verified_at_element():
+    """Page must contain the timestamp element populated after each verify call."""
+    r = client.get("/")
+    assert 'id="verified-at"' in r.text
+
+
+def test_root_has_raw_json_panel():
+    """Page must contain the raw JSON debug panel."""
+    r = client.get("/")
+    assert 'id="raw-json-panel"' in r.text
+    assert 'id="raw-json"' in r.text

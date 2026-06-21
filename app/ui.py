@@ -88,7 +88,7 @@ INDEX_HTML = """<!DOCTYPE html>
       gap: 0.75rem;
       padding: 1rem 1.25rem;
       border-radius: 6px;
-      margin-bottom: 1rem;
+      margin-bottom: 0.5rem;
       font-size: 1.1rem;
       font-weight: 700;
     }
@@ -97,6 +97,13 @@ INDEX_HTML = """<!DOCTYPE html>
     .verdict.invalid { background: #2d0f0f; border: 1px solid #da3633; color: #f85149; }
 
     .verdict-icon { font-size: 1.3rem; }
+
+    .verified-at {
+      font-size: 0.78rem;
+      color: #8b949e;
+      margin-bottom: 1rem;
+      padding-left: 0.25rem;
+    }
 
     .checks-grid { display: flex; flex-direction: column; gap: 0.4rem; }
 
@@ -125,7 +132,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .errors-section { margin-top: 1rem; }
 
-    .errors-title {
+    .section-label {
       font-size: 0.8rem;
       font-weight: 600;
       text-transform: uppercase;
@@ -142,6 +149,49 @@ INDEX_HTML = """<!DOCTYPE html>
     }
 
     .error-item:last-child { border-bottom: none; }
+
+    .raw-panel {
+      margin-top: 1rem;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .raw-panel summary {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #8b949e;
+      padding: 0.6rem 0.75rem;
+      cursor: pointer;
+      user-select: none;
+      background: #0d1117;
+      list-style: none;
+    }
+
+    .raw-panel summary::-webkit-details-marker { display: none; }
+
+    .raw-panel summary::before {
+      content: '▶ ';
+      font-size: 0.65rem;
+      vertical-align: middle;
+    }
+
+    .raw-panel[open] summary::before { content: '▼ '; }
+
+    #raw-json {
+      margin: 0;
+      padding: 0.75rem;
+      background: #0d1117;
+      border-top: 1px solid #30363d;
+      color: #8b949e;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.8rem;
+      line-height: 1.6;
+      white-space: pre;
+      overflow-x: auto;
+    }
   </style>
 </head>
 <body>
@@ -166,23 +216,33 @@ INDEX_HTML = """<!DOCTYPE html>
 
     <div id="result" class="card result-card">
       <div id="verdict" class="verdict"></div>
+      <p id="verified-at" class="verified-at"></p>
+
       <div class="checks-grid" id="checks"></div>
+
       <div id="errors-section" class="errors-section" hidden>
-        <p class="errors-title">Errors</p>
+        <p class="section-label">Errors</p>
         <div id="errors-list"></div>
       </div>
+
+      <details id="raw-json-panel" class="raw-panel">
+        <summary>Raw JSON response</summary>
+        <pre id="raw-json"></pre>
+      </details>
     </div>
   </div>
 
   <script>
-    const btn            = document.getElementById('verify-btn');
-    const textarea       = document.getElementById('receipt');
-    const resultEl       = document.getElementById('result');
-    const verdictEl      = document.getElementById('verdict');
-    const checksEl       = document.getElementById('checks');
-    const errorsSection  = document.getElementById('errors-section');
-    const errorsList     = document.getElementById('errors-list');
-    const jsonError      = document.getElementById('json-error');
+    const btn           = document.getElementById('verify-btn');
+    const textarea      = document.getElementById('receipt');
+    const resultEl      = document.getElementById('result');
+    const verdictEl     = document.getElementById('verdict');
+    const verifiedAtEl  = document.getElementById('verified-at');
+    const checksEl      = document.getElementById('checks');
+    const errorsSection = document.getElementById('errors-section');
+    const errorsList    = document.getElementById('errors-list');
+    const jsonError     = document.getElementById('json-error');
+    const rawJson       = document.getElementById('raw-json');
 
     btn.addEventListener('click', async () => {
       jsonError.hidden = true;
@@ -217,11 +277,16 @@ INDEX_HTML = """<!DOCTYPE html>
     });
 
     function render(result) {
+      // Verdict banner
       verdictEl.className = 'verdict ' + (result.valid ? 'valid' : 'invalid');
       verdictEl.innerHTML = result.valid
         ? '<span class="verdict-icon">&#10003;</span> VALID'
         : '<span class="verdict-icon">&#10007;</span> INVALID';
 
+      // Timestamp
+      verifiedAtEl.textContent = 'Verified at ' + new Date().toLocaleTimeString();
+
+      // Checks — render every entry returned by the API, no hardcoding
       checksEl.innerHTML = '';
       for (const [name, status] of Object.entries(result.checks)) {
         const row = document.createElement('div');
@@ -233,6 +298,7 @@ INDEX_HTML = """<!DOCTYPE html>
         checksEl.appendChild(row);
       }
 
+      // Errors
       if (result.errors && result.errors.length > 0) {
         errorsList.innerHTML = result.errors
           .map(e => '<div class="error-item">' + e + '</div>')
@@ -241,6 +307,9 @@ INDEX_HTML = """<!DOCTYPE html>
       } else {
         errorsSection.hidden = true;
       }
+
+      // Raw JSON debug panel
+      rawJson.textContent = JSON.stringify(result, null, 2);
 
       resultEl.style.display = 'block';
     }
