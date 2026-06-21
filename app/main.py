@@ -32,6 +32,7 @@ async def verify(request: Request):
 class GenerateRequest(BaseModel):
     receiptId: Optional[str] = None
     timestamp: Optional[str] = None
+    payload: Optional[Any] = None
     payloadHash: Optional[str] = None
 
 
@@ -40,6 +41,7 @@ def generate(req: GenerateRequest = GenerateRequest()):
     return generate_receipt(
         receipt_id=req.receiptId,
         timestamp=req.timestamp,
+        payload=req.payload,
         payload_hash=req.payloadHash,
     )
 

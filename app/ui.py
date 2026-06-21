@@ -23,7 +23,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .subtitle { color: #8b949e; margin-top: 0.25rem; font-size: 0.9rem; }
 
-    /* ── Tabs ──────────────────────────────────────────────────── */
+    /* ── Tabs ───────────────────────────────────────────────────── */
     .tabs {
       display: flex;
       gap: 0.25rem;
@@ -52,7 +52,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .tab-panel[hidden] { display: none; }
 
-    /* ── Cards ─────────────────────────────────────────────────── */
+    /* ── Cards ──────────────────────────────────────────────────── */
     .card {
       background: #161b22;
       border: 1px solid #30363d;
@@ -61,7 +61,7 @@ INDEX_HTML = """<!DOCTYPE html>
       margin-bottom: 1rem;
     }
 
-    /* ── Form elements ─────────────────────────────────────────── */
+    /* ── Form elements ──────────────────────────────────────────── */
     label {
       display: block;
       font-size: 0.8rem;
@@ -86,17 +86,16 @@ INDEX_HTML = """<!DOCTYPE html>
       transition: border-color 0.15s;
     }
 
-    textarea { height: 280px; resize: vertical; }
+    textarea           { height: 280px; resize: vertical; }
+    textarea.short     { height: 120px; }
 
     textarea:focus, input[type="text"]:focus { border-color: #58a6ff; }
 
     .field-row { margin-bottom: 0.75rem; }
 
-    .field-row label {
-      font-size: 0.75rem;
-      margin-bottom: 0.3rem;
-    }
+    .field-row label { font-size: 0.75rem; margin-bottom: 0.3rem; }
 
+    /* ── Buttons ────────────────────────────────────────────────── */
     button {
       display: block;
       width: 100%;
@@ -125,8 +124,8 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .btn-secondary:hover { background: #30363d; }
 
-    /* ── Inline messages ───────────────────────────────────────── */
-    .json-error { color: #f85149; font-size: 0.85rem; margin-top: 0.5rem; }
+    /* ── Inline messages ────────────────────────────────────────── */
+    .inline-error { color: #f85149; font-size: 0.85rem; margin-top: 0.5rem; }
 
     .warning {
       font-size: 0.8rem;
@@ -134,7 +133,7 @@ INDEX_HTML = """<!DOCTYPE html>
       margin-bottom: 0.5rem;
     }
 
-    /* ── Verify result ─────────────────────────────────────────── */
+    /* ── Verify result ──────────────────────────────────────────── */
     .result-card { display: none; }
 
     .verdict {
@@ -205,7 +204,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .error-item:last-child { border-bottom: none; }
 
-    /* ── Raw JSON panel ────────────────────────────────────────── */
+    /* ── Raw / code panels ──────────────────────────────────────── */
     .raw-panel {
       margin-top: 1rem;
       border: 1px solid #30363d;
@@ -244,10 +243,10 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .raw-panel pre { border-top: 1px solid #30363d; }
 
-    /* ── Generator result ──────────────────────────────────────── */
-    .gen-pre {
+    .code-block {
       border: 1px solid #30363d;
       border-radius: 6px;
+      overflow: hidden;
       margin-bottom: 0.5rem;
     }
   </style>
@@ -264,7 +263,7 @@ INDEX_HTML = """<!DOCTYPE html>
       <button class="tab-btn" data-tab="generate">Generate</button>
     </div>
 
-    <!-- ── Verify tab ─────────────────────────────────────────── -->
+    <!-- ── Verify tab ──────────────────────────────────────────── -->
     <div id="tab-verify" class="tab-panel">
       <div class="card">
         <label for="receipt">Receipt JSON</label>
@@ -275,7 +274,7 @@ INDEX_HTML = """<!DOCTYPE html>
   "publicKey": "base64url-encoded-key",
   "signature": "base64url-encoded-sig"
 }'></textarea>
-        <p id="json-error" class="json-error" hidden></p>
+        <p id="json-error" class="inline-error" hidden></p>
         <button id="verify-btn">Verify</button>
       </div>
 
@@ -297,41 +296,46 @@ INDEX_HTML = """<!DOCTYPE html>
       </div>
     </div>
 
-    <!-- ── Generate tab ───────────────────────────────────────── -->
+    <!-- ── Generate tab ────────────────────────────────────────── -->
     <div id="tab-generate" class="tab-panel" hidden>
       <div class="card">
         <p class="section-label" style="margin-bottom:1rem">Receipt Fields</p>
+
         <div class="field-row">
           <label for="gen-receipt-id">receiptId</label>
           <input id="gen-receipt-id" type="text" placeholder="auto-generated">
         </div>
+
         <div class="field-row">
           <label for="gen-timestamp">timestamp</label>
           <input id="gen-timestamp" type="text" placeholder="auto-generated (now)">
         </div>
+
         <div class="field-row">
-          <label for="gen-payload-hash">payloadHash</label>
-          <input id="gen-payload-hash" type="text" placeholder="auto-generated (random SHA-256)">
+          <label for="gen-payload">Payload JSON</label>
+          <textarea id="gen-payload" class="short" spellcheck="false"
+            placeholder='{"key": "value"}'></textarea>
         </div>
-        <p id="gen-error" class="json-error" hidden></p>
+
+        <p id="gen-error" class="inline-error" hidden></p>
         <button id="generate-btn">Generate Receipt</button>
       </div>
 
       <div id="generator" class="card" hidden>
         <p class="section-label" style="margin-bottom:0.5rem">Generated Receipt</p>
-        <div class="gen-pre"><pre id="generated-receipt"></pre></div>
+        <div class="code-block"><pre id="generated-receipt"></pre></div>
         <button id="copy-receipt-btn" class="btn-secondary">Copy JSON</button>
-        <button id="send-to-verifier-btn" class="btn-secondary">Send to Verifier</button>
+        <button id="verify-generated-btn">Verify Generated Receipt</button>
 
         <p class="section-label" style="margin-top:1.25rem;margin-bottom:0.25rem">Private Key</p>
         <p class="warning">Store this securely — it will not be shown again.</p>
-        <div class="gen-pre"><pre id="generated-private-key"></pre></div>
+        <div class="code-block"><pre id="generated-private-key"></pre></div>
       </div>
     </div>
   </div>
 
   <script>
-    // ── Tab switching ────────────────────────────────────────────
+    // ── Tab switching ─────────────────────────────────────────────
     document.querySelectorAll('.tab-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
         document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -341,13 +345,13 @@ INDEX_HTML = """<!DOCTYPE html>
       });
     });
 
-    // ── Verify ───────────────────────────────────────────────────
-    var verifyBtn    = document.getElementById('verify-btn');
-    var textarea     = document.getElementById('receipt');
-    var resultEl     = document.getElementById('result');
-    var verdictEl    = document.getElementById('verdict');
-    var verifiedAtEl = document.getElementById('verified-at');
-    var checksEl     = document.getElementById('checks');
+    // ── Verify ────────────────────────────────────────────────────
+    var verifyBtn      = document.getElementById('verify-btn');
+    var textarea       = document.getElementById('receipt');
+    var resultEl       = document.getElementById('result');
+    var verdictEl      = document.getElementById('verdict');
+    var verifiedAtEl   = document.getElementById('verified-at');
+    var checksEl       = document.getElementById('checks');
     var errorsSection  = document.getElementById('errors-section');
     var errorsList     = document.getElementById('errors-list');
     var jsonError      = document.getElementById('json-error');
@@ -418,14 +422,14 @@ INDEX_HTML = """<!DOCTYPE html>
       resultEl.style.display = 'block';
     }
 
-    // ── Generate ─────────────────────────────────────────────────
-    var generateBtn       = document.getElementById('generate-btn');
-    var generatorResult   = document.getElementById('generator');
-    var generatedReceipt  = document.getElementById('generated-receipt');
-    var generatedPrivKey  = document.getElementById('generated-private-key');
-    var copyReceiptBtn    = document.getElementById('copy-receipt-btn');
-    var sendToVerifierBtn = document.getElementById('send-to-verifier-btn');
-    var genError          = document.getElementById('gen-error');
+    // ── Generate ──────────────────────────────────────────────────
+    var generateBtn      = document.getElementById('generate-btn');
+    var generatorResult  = document.getElementById('generator');
+    var generatedReceipt = document.getElementById('generated-receipt');
+    var generatedPrivKey = document.getElementById('generated-private-key');
+    var copyReceiptBtn   = document.getElementById('copy-receipt-btn');
+    var verifyGenBtn     = document.getElementById('verify-generated-btn');
+    var genError         = document.getElementById('gen-error');
 
     var _lastReceipt = null;
 
@@ -436,12 +440,24 @@ INDEX_HTML = """<!DOCTYPE html>
       generateBtn.textContent = 'Generating…';
 
       var req = {};
-      var rid = document.getElementById('gen-receipt-id').value.trim();
-      var ts  = document.getElementById('gen-timestamp').value.trim();
-      var ph  = document.getElementById('gen-payload-hash').value.trim();
-      if (rid) req.receiptId   = rid;
-      if (ts)  req.timestamp   = ts;
-      if (ph)  req.payloadHash = ph;
+      var rid         = document.getElementById('gen-receipt-id').value.trim();
+      var ts          = document.getElementById('gen-timestamp').value.trim();
+      var payloadText = document.getElementById('gen-payload').value.trim();
+
+      if (rid) req.receiptId = rid;
+      if (ts)  req.timestamp = ts;
+
+      if (payloadText) {
+        try {
+          req.payload = JSON.parse(payloadText);
+        } catch (e) {
+          genError.textContent = 'Invalid payload JSON: ' + e.message;
+          genError.hidden = false;
+          generateBtn.disabled = false;
+          generateBtn.textContent = 'Generate Receipt';
+          return;
+        }
+      }
 
       try {
         var res = await fetch('/generate', {
@@ -464,17 +480,18 @@ INDEX_HTML = """<!DOCTYPE html>
     });
 
     copyReceiptBtn.addEventListener('click', function() {
-      if (_lastReceipt) {
-        navigator.clipboard.writeText(JSON.stringify(_lastReceipt, null, 2));
-        copyReceiptBtn.textContent = 'Copied!';
-        setTimeout(function() { copyReceiptBtn.textContent = 'Copy JSON'; }, 1500);
-      }
+      if (!_lastReceipt) return;
+      navigator.clipboard.writeText(JSON.stringify(_lastReceipt, null, 2));
+      copyReceiptBtn.textContent = 'Copied!';
+      setTimeout(function() { copyReceiptBtn.textContent = 'Copy JSON'; }, 1500);
     });
 
-    sendToVerifierBtn.addEventListener('click', function() {
+    // Populate verify textarea, switch tab, auto-trigger verification
+    verifyGenBtn.addEventListener('click', function() {
       if (!_lastReceipt) return;
       textarea.value = JSON.stringify(_lastReceipt, null, 2);
       document.querySelector('[data-tab="verify"]').click();
+      verifyBtn.click();
     });
   </script>
 </body>

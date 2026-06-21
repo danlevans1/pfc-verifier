@@ -1,3 +1,4 @@
+import hashlib
 import json
 from base64 import urlsafe_b64encode
 
@@ -244,3 +245,32 @@ def test_root_has_generated_receipt_element():
     r = client.get("/")
     assert 'id="generated-receipt"' in r.text
     assert 'id="generator"' in r.text
+
+
+# ── V5.1: payload JSON generation tests ──────────────────────────────────────
+
+def test_generate_with_payload_json():
+    r = client.post("/generate", json={"payload": {"agent": "alpha", "action": "transfer"}})
+    assert r.status_code == 200
+    ph = r.json()["receipt"]["payloadHash"]
+    assert len(ph) == 64
+    assert all(c in "0123456789abcdef" for c in ph)
+
+
+def test_generate_payload_hash_is_sha256_of_canonical_json():
+    payload = {"z": 1, "a": 2}
+    r = client.post("/generate", json={"payload": payload})
+    expected = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    assert r.json()["receipt"]["payloadHash"] == expected
+
+
+def test_root_has_payload_json_editor():
+    r = client.get("/")
+    assert 'id="gen-payload"' in r.text
+
+
+def test_root_has_verify_generated_btn():
+    r = client.get("/")
+    assert 'id="verify-generated-btn"' in r.text
