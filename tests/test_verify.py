@@ -163,3 +163,16 @@ def test_legacy_unsigned_receipt_behavior():
     assert body["valid"] is True
     assert "cryptographicSignature" not in body["checks"]
     assert set(body["checks"].keys()) == {"schema", "payloadHash", "signature"}
+
+
+# ── UI tests ──────────────────────────────────────────────────────────────────
+
+def test_root_returns_200():
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+
+
+def test_root_contains_title():
+    r = client.get("/")
+    assert "PFC Verifier" in r.text
