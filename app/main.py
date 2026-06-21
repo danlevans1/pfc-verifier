@@ -3,10 +3,17 @@ from typing import Any, Dict
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 
+from app.ui import INDEX_HTML
 from app.verifier import verify_receipt
 
 app = FastAPI(title="PFC Receipt Verifier", version="0.1.0")
+
+
+@app.get("/", response_class=HTMLResponse)
+def index():
+    return INDEX_HTML
 
 
 @app.get("/health")
