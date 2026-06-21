@@ -17,12 +17,42 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .container { max-width: 720px; margin: 0 auto; }
 
-    header { margin-bottom: 2rem; }
+    header { margin-bottom: 1.5rem; }
 
     h1 { font-size: 1.75rem; font-weight: 700; color: #f0f6fc; }
 
     .subtitle { color: #8b949e; margin-top: 0.25rem; font-size: 0.9rem; }
 
+    /* ── Tabs ──────────────────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      gap: 0.25rem;
+      border-bottom: 1px solid #30363d;
+      margin-bottom: 1.25rem;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #8b949e;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 0.6rem 1rem;
+      margin-bottom: -1px;
+      border-radius: 0;
+      width: auto;
+      display: inline-block;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .tab-btn:hover  { color: #e1e4e8; background: none; }
+    .tab-btn.active { color: #f0f6fc; border-bottom-color: #58a6ff; background: none; }
+
+    .tab-panel[hidden] { display: none; }
+
+    /* ── Cards ─────────────────────────────────────────────────── */
     .card {
       background: #161b22;
       border: 1px solid #30363d;
@@ -31,6 +61,7 @@ INDEX_HTML = """<!DOCTYPE html>
       margin-bottom: 1rem;
     }
 
+    /* ── Form elements ─────────────────────────────────────────── */
     label {
       display: block;
       font-size: 0.8rem;
@@ -41,9 +72,8 @@ INDEX_HTML = """<!DOCTYPE html>
       margin-bottom: 0.5rem;
     }
 
-    textarea {
+    textarea, input[type="text"] {
       width: 100%;
-      height: 280px;
       background: #0d1117;
       border: 1px solid #30363d;
       border-radius: 6px;
@@ -51,13 +81,21 @@ INDEX_HTML = """<!DOCTYPE html>
       font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
       font-size: 0.85rem;
       line-height: 1.6;
-      padding: 0.75rem;
-      resize: vertical;
+      padding: 0.65rem 0.75rem;
       outline: none;
       transition: border-color 0.15s;
     }
 
-    textarea:focus { border-color: #58a6ff; }
+    textarea { height: 280px; resize: vertical; }
+
+    textarea:focus, input[type="text"]:focus { border-color: #58a6ff; }
+
+    .field-row { margin-bottom: 0.75rem; }
+
+    .field-row label {
+      font-size: 0.75rem;
+      margin-bottom: 0.3rem;
+    }
 
     button {
       display: block;
@@ -78,8 +116,25 @@ INDEX_HTML = """<!DOCTYPE html>
     button:active { background: #1a7f37; }
     button:disabled { background: #21262d; color: #484f58; cursor: default; }
 
+    .btn-secondary {
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+      margin-top: 0.5rem;
+    }
+
+    .btn-secondary:hover { background: #30363d; }
+
+    /* ── Inline messages ───────────────────────────────────────── */
     .json-error { color: #f85149; font-size: 0.85rem; margin-top: 0.5rem; }
 
+    .warning {
+      font-size: 0.8rem;
+      color: #e3b341;
+      margin-bottom: 0.5rem;
+    }
+
+    /* ── Verify result ─────────────────────────────────────────── */
     .result-card { display: none; }
 
     .verdict {
@@ -150,6 +205,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .error-item:last-child { border-bottom: none; }
 
+    /* ── Raw JSON panel ────────────────────────────────────────── */
     .raw-panel {
       margin-top: 1rem;
       border: 1px solid #30363d;
@@ -171,20 +227,13 @@ INDEX_HTML = """<!DOCTYPE html>
     }
 
     .raw-panel summary::-webkit-details-marker { display: none; }
-
-    .raw-panel summary::before {
-      content: '▶ ';
-      font-size: 0.65rem;
-      vertical-align: middle;
-    }
-
+    .raw-panel summary::before { content: '▶ '; font-size: 0.65rem; vertical-align: middle; }
     .raw-panel[open] summary::before { content: '▼ '; }
 
-    #raw-json {
+    pre {
       margin: 0;
       padding: 0.75rem;
       background: #0d1117;
-      border-top: 1px solid #30363d;
       color: #8b949e;
       font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
       font-size: 0.8rem;
@@ -192,64 +241,124 @@ INDEX_HTML = """<!DOCTYPE html>
       white-space: pre;
       overflow-x: auto;
     }
+
+    .raw-panel pre { border-top: 1px solid #30363d; }
+
+    /* ── Generator result ──────────────────────────────────────── */
+    .gen-pre {
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
       <h1>PFC Verifier</h1>
-      <p class="subtitle">Verify PFC receipt integrity and Ed25519 signatures</p>
+      <p class="subtitle">Verify and generate PFC receipts with Ed25519 signatures</p>
     </header>
 
-    <div class="card">
-      <label for="receipt">Receipt JSON</label>
-      <textarea id="receipt" spellcheck="false" placeholder='{
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="verify">Verify</button>
+      <button class="tab-btn" data-tab="generate">Generate</button>
+    </div>
+
+    <!-- ── Verify tab ─────────────────────────────────────────── -->
+    <div id="tab-verify" class="tab-panel">
+      <div class="card">
+        <label for="receipt">Receipt JSON</label>
+        <textarea id="receipt" spellcheck="false" placeholder='{
   "receiptId": "receipt-v2-001",
   "timestamp": "2026-06-21T00:00:00Z",
   "payloadHash": "aaa...aaa",
   "publicKey": "base64url-encoded-key",
   "signature": "base64url-encoded-sig"
 }'></textarea>
-      <p id="json-error" class="json-error" hidden></p>
-      <button id="verify-btn">Verify</button>
-    </div>
-
-    <div id="result" class="card result-card">
-      <div id="verdict" class="verdict"></div>
-      <p id="verified-at" class="verified-at"></p>
-
-      <div class="checks-grid" id="checks"></div>
-
-      <div id="errors-section" class="errors-section" hidden>
-        <p class="section-label">Errors</p>
-        <div id="errors-list"></div>
+        <p id="json-error" class="json-error" hidden></p>
+        <button id="verify-btn">Verify</button>
       </div>
 
-      <details id="raw-json-panel" class="raw-panel">
-        <summary>Raw JSON response</summary>
-        <pre id="raw-json"></pre>
-      </details>
+      <div id="result" class="card result-card">
+        <div id="verdict" class="verdict"></div>
+        <p id="verified-at" class="verified-at"></p>
+
+        <div class="checks-grid" id="checks"></div>
+
+        <div id="errors-section" class="errors-section" hidden>
+          <p class="section-label">Errors</p>
+          <div id="errors-list"></div>
+        </div>
+
+        <details id="raw-json-panel" class="raw-panel">
+          <summary>Raw JSON response</summary>
+          <pre id="raw-json"></pre>
+        </details>
+      </div>
+    </div>
+
+    <!-- ── Generate tab ───────────────────────────────────────── -->
+    <div id="tab-generate" class="tab-panel" hidden>
+      <div class="card">
+        <p class="section-label" style="margin-bottom:1rem">Receipt Fields</p>
+        <div class="field-row">
+          <label for="gen-receipt-id">receiptId</label>
+          <input id="gen-receipt-id" type="text" placeholder="auto-generated">
+        </div>
+        <div class="field-row">
+          <label for="gen-timestamp">timestamp</label>
+          <input id="gen-timestamp" type="text" placeholder="auto-generated (now)">
+        </div>
+        <div class="field-row">
+          <label for="gen-payload-hash">payloadHash</label>
+          <input id="gen-payload-hash" type="text" placeholder="auto-generated (random SHA-256)">
+        </div>
+        <p id="gen-error" class="json-error" hidden></p>
+        <button id="generate-btn">Generate Receipt</button>
+      </div>
+
+      <div id="generator" class="card" hidden>
+        <p class="section-label" style="margin-bottom:0.5rem">Generated Receipt</p>
+        <div class="gen-pre"><pre id="generated-receipt"></pre></div>
+        <button id="copy-receipt-btn" class="btn-secondary">Copy JSON</button>
+        <button id="send-to-verifier-btn" class="btn-secondary">Send to Verifier</button>
+
+        <p class="section-label" style="margin-top:1.25rem;margin-bottom:0.25rem">Private Key</p>
+        <p class="warning">Store this securely — it will not be shown again.</p>
+        <div class="gen-pre"><pre id="generated-private-key"></pre></div>
+      </div>
     </div>
   </div>
 
   <script>
-    const btn           = document.getElementById('verify-btn');
-    const textarea      = document.getElementById('receipt');
-    const resultEl      = document.getElementById('result');
-    const verdictEl     = document.getElementById('verdict');
-    const verifiedAtEl  = document.getElementById('verified-at');
-    const checksEl      = document.getElementById('checks');
-    const errorsSection = document.getElementById('errors-section');
-    const errorsList    = document.getElementById('errors-list');
-    const jsonError     = document.getElementById('json-error');
-    const rawJson       = document.getElementById('raw-json');
+    // ── Tab switching ────────────────────────────────────────────
+    document.querySelectorAll('.tab-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+        document.querySelectorAll('.tab-panel').forEach(function(p) { p.hidden = true; });
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).hidden = false;
+      });
+    });
 
-    btn.addEventListener('click', async () => {
+    // ── Verify ───────────────────────────────────────────────────
+    var verifyBtn    = document.getElementById('verify-btn');
+    var textarea     = document.getElementById('receipt');
+    var resultEl     = document.getElementById('result');
+    var verdictEl    = document.getElementById('verdict');
+    var verifiedAtEl = document.getElementById('verified-at');
+    var checksEl     = document.getElementById('checks');
+    var errorsSection  = document.getElementById('errors-section');
+    var errorsList     = document.getElementById('errors-list');
+    var jsonError      = document.getElementById('json-error');
+    var rawJson        = document.getElementById('raw-json');
+
+    verifyBtn.addEventListener('click', async function() {
       jsonError.hidden = true;
       resultEl.style.display = 'none';
 
-      const text = textarea.value.trim();
-      let data;
+      var text = textarea.value.trim();
+      var data;
       try {
         data = JSON.parse(text);
       } catch (e) {
@@ -258,61 +367,115 @@ INDEX_HTML = """<!DOCTYPE html>
         return;
       }
 
-      btn.disabled = true;
-      btn.textContent = 'Verifying…';
+      verifyBtn.disabled = true;
+      verifyBtn.textContent = 'Verifying…';
       try {
-        const res = await fetch('/verify', {
+        var res = await fetch('/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
         });
-        render(await res.json());
+        renderResult(await res.json());
       } catch (e) {
         jsonError.textContent = 'Request failed: ' + e.message;
         jsonError.hidden = false;
       } finally {
-        btn.disabled = false;
-        btn.textContent = 'Verify';
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = 'Verify';
       }
     });
 
-    function render(result) {
-      // Verdict banner
+    function renderResult(result) {
       verdictEl.className = 'verdict ' + (result.valid ? 'valid' : 'invalid');
       verdictEl.innerHTML = result.valid
         ? '<span class="verdict-icon">&#10003;</span> VALID'
         : '<span class="verdict-icon">&#10007;</span> INVALID';
 
-      // Timestamp
       verifiedAtEl.textContent = 'Verified at ' + new Date().toLocaleTimeString();
 
-      // Checks — render every entry returned by the API, no hardcoding
       checksEl.innerHTML = '';
-      for (const [name, status] of Object.entries(result.checks)) {
-        const row = document.createElement('div');
+      for (var entry of Object.entries(result.checks)) {
+        var name = entry[0], status = entry[1];
+        var row = document.createElement('div');
         row.className = 'check-row';
-        const cls = status === 'PASS' ? 'pass' : 'fail';
+        var cls = status === 'PASS' ? 'pass' : 'fail';
         row.innerHTML =
           '<span class="check-name">' + name + '</span>' +
           '<span class="badge ' + cls + '">' + status + '</span>';
         checksEl.appendChild(row);
       }
 
-      // Errors
       if (result.errors && result.errors.length > 0) {
         errorsList.innerHTML = result.errors
-          .map(e => '<div class="error-item">' + e + '</div>')
+          .map(function(e) { return '<div class="error-item">' + e + '</div>'; })
           .join('');
         errorsSection.hidden = false;
       } else {
         errorsSection.hidden = true;
       }
 
-      // Raw JSON debug panel
       rawJson.textContent = JSON.stringify(result, null, 2);
-
       resultEl.style.display = 'block';
     }
+
+    // ── Generate ─────────────────────────────────────────────────
+    var generateBtn       = document.getElementById('generate-btn');
+    var generatorResult   = document.getElementById('generator');
+    var generatedReceipt  = document.getElementById('generated-receipt');
+    var generatedPrivKey  = document.getElementById('generated-private-key');
+    var copyReceiptBtn    = document.getElementById('copy-receipt-btn');
+    var sendToVerifierBtn = document.getElementById('send-to-verifier-btn');
+    var genError          = document.getElementById('gen-error');
+
+    var _lastReceipt = null;
+
+    generateBtn.addEventListener('click', async function() {
+      genError.hidden = true;
+      generatorResult.hidden = true;
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'Generating…';
+
+      var req = {};
+      var rid = document.getElementById('gen-receipt-id').value.trim();
+      var ts  = document.getElementById('gen-timestamp').value.trim();
+      var ph  = document.getElementById('gen-payload-hash').value.trim();
+      if (rid) req.receiptId   = rid;
+      if (ts)  req.timestamp   = ts;
+      if (ph)  req.payloadHash = ph;
+
+      try {
+        var res = await fetch('/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req),
+        });
+        var data = await res.json();
+        _lastReceipt = data.receipt;
+        generatedReceipt.textContent = JSON.stringify(data.receipt, null, 2);
+        generatedPrivKey.textContent = data.privateKey;
+        generatorResult.hidden = false;
+      } catch (e) {
+        genError.textContent = 'Request failed: ' + e.message;
+        genError.hidden = false;
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Generate Receipt';
+      }
+    });
+
+    copyReceiptBtn.addEventListener('click', function() {
+      if (_lastReceipt) {
+        navigator.clipboard.writeText(JSON.stringify(_lastReceipt, null, 2));
+        copyReceiptBtn.textContent = 'Copied!';
+        setTimeout(function() { copyReceiptBtn.textContent = 'Copy JSON'; }, 1500);
+      }
+    });
+
+    sendToVerifierBtn.addEventListener('click', function() {
+      if (!_lastReceipt) return;
+      textarea.value = JSON.stringify(_lastReceipt, null, 2);
+      document.querySelector('[data-tab="verify"]').click();
+    });
   </script>
 </body>
 </html>"""
