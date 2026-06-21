@@ -195,3 +195,52 @@ def test_root_has_raw_json_panel():
     r = client.get("/")
     assert 'id="raw-json-panel"' in r.text
     assert 'id="raw-json"' in r.text
+
+
+# ── Generator endpoint tests ──────────────────────────────────────────────────
+
+def test_generate_returns_signed_receipt():
+    r = client.post("/generate", json={})
+    assert r.status_code == 200
+    body = r.json()
+    assert "receipt" in body
+    assert "privateKey" in body
+    for field in ("receiptId", "timestamp", "payloadHash", "publicKey", "signature"):
+        assert field in body["receipt"]
+
+
+def test_generate_uses_provided_fields():
+    r = client.post("/generate", json={
+        "receiptId": "my-receipt",
+        "timestamp": "2026-06-21T00:00:00Z",
+        "payloadHash": "a" * 64,
+    })
+    receipt = r.json()["receipt"]
+    assert receipt["receiptId"] == "my-receipt"
+    assert receipt["timestamp"] == "2026-06-21T00:00:00Z"
+    assert receipt["payloadHash"] == "a" * 64
+
+
+def test_generated_receipt_passes_verification():
+    receipt = client.post("/generate", json={}).json()["receipt"]
+    body = client.post("/verify", json=receipt).json()
+    assert body["valid"] is True
+    assert body["checks"]["cryptographicSignature"] == "PASS"
+
+
+# ── Generator UI tests ────────────────────────────────────────────────────────
+
+def test_root_has_generate_tab():
+    r = client.get("/")
+    assert 'data-tab="generate"' in r.text
+
+
+def test_root_has_generate_btn():
+    r = client.get("/")
+    assert 'id="generate-btn"' in r.text
+
+
+def test_root_has_generated_receipt_element():
+    r = client.get("/")
+    assert 'id="generated-receipt"' in r.text
+    assert 'id="generator"' in r.text
