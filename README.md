@@ -1,6 +1,6 @@
 # PFC Receipt Verifier
 
-MVP service for verifying PFC (Prime Form Calculus) receipts.
+Service for verifying PFC (Prime Form Calculus) receipts, including Ed25519 cryptographic signature verification.
 
 ## Endpoints
 
@@ -11,19 +11,20 @@ MVP service for verifying PFC (Prime Form Calculus) receipts.
 
 ## POST /verify
 
-Accepts any JSON object and returns a validation result.
+### Legacy receipt (no cryptographic verification)
 
-**Example request:**
+Omit `publicKey` to skip Ed25519 verification. Existing consumers are unaffected.
+
 ```json
 {
   "receiptId": "receipt-abc-123",
   "timestamp": "2026-06-21T00:00:00Z",
   "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "signature": "deadbeef"
+  "signature": "any-non-empty-string"
 }
 ```
 
-**Example response:**
+Response:
 ```json
 {
   "valid": true,
@@ -36,6 +37,34 @@ Accepts any JSON object and returns a validation result.
 }
 ```
 
+### Signed receipt (Ed25519 verification)
+
+Include `publicKey` to trigger cryptographic verification.
+
+```json
+{
+  "receiptId": "receipt-v2-001",
+  "timestamp": "2026-06-21T00:00:00Z",
+  "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "publicKey": "<base64url-encoded Ed25519 public key>",
+  "signature": "<base64url-encoded Ed25519 signature>"
+}
+```
+
+Response:
+```json
+{
+  "valid": true,
+  "checks": {
+    "schema": "PASS",
+    "payloadHash": "PASS",
+    "signature": "PASS",
+    "cryptographicSignature": "PASS"
+  },
+  "errors": []
+}
+```
+
 ### Validation rules
 
 | Check | PASS condition |
@@ -43,10 +72,89 @@ Accepts any JSON object and returns a validation result.
 | `schema` | Receipt contains `receiptId`, `timestamp`, `payloadHash`, `signature` |
 | `payloadHash` | Value is a 64-character lowercase hex string |
 | `signature` | Value is a non-empty string |
+| `cryptographicSignature` | Only present when `publicKey` is included. Ed25519 signature verifies against the canonical payload. |
+
+### Canonical payload
+
+The signed message is the compact JSON of exactly these three fields, keys sorted alphabetically:
+
+```
+{"payloadHash":"<value>","receiptId":"<value>","timestamp":"<value>"}
+```
+
+All values taken verbatim from the receipt. No whitespace.
+
+## Working with Ed25519 receipts
+
+### Generate a keypair
+
+```python
+from base64 import urlsafe_b64encode
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+def b64url(b: bytes) -> str:
+    return urlsafe_b64encode(b).rstrip(b"=").decode()
+
+private_key = Ed25519PrivateKey.generate()
+public_key  = private_key.public_key()
+
+print("private:", b64url(private_key.private_bytes_raw()))
+print("public: ", b64url(public_key.public_bytes_raw()))
+```
+
+Store the private key securely (never include it in a receipt). Distribute the public key.
+
+### Sign a receipt
+
+```python
+import json
+from base64 import urlsafe_b64encode
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+def b64url(b: bytes) -> str:
+    return urlsafe_b64encode(b).rstrip(b"=").decode()
+
+def canonical_payload(receipt: dict) -> bytes:
+    fields = {k: receipt[k] for k in ("payloadHash", "receiptId", "timestamp")}
+    return json.dumps(fields, sort_keys=True, separators=(",", ":")).encode()
+
+# Load your private key (from secure storage)
+private_key = Ed25519PrivateKey.generate()  # replace with your actual key
+
+receipt = {
+    "receiptId":   "receipt-v2-001",
+    "timestamp":   "2026-06-21T00:00:00Z",
+    "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "publicKey":   b64url(private_key.public_key().public_bytes_raw()),
+}
+receipt["signature"] = b64url(private_key.sign(canonical_payload(receipt)))
+print(json.dumps(receipt, indent=2))
+```
+
+### Verify a receipt
+
+```bash
+curl -s -X POST https://<your-railway-url>/verify \
+  -H "Content-Type: application/json" \
+  -d @receipt.json | jq .
+```
+
+Or in Python:
+
+```python
+import httpx, json
+
+with open("receipt.json") as f:
+    receipt = json.load(f)
+
+r = httpx.post("https://<your-railway-url>/verify", json=receipt)
+print(r.json())
+```
 
 ## Running locally
 
 ```bash
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
@@ -59,4 +167,4 @@ pytest tests/ -v
 
 ## Deploy to Railway
 
-This repo includes a `Dockerfile` and `railway.json`. Connect the repo in Railway and it will build and deploy automatically. The `PORT` environment variable is set by Railway at runtime.
+This repo includes a `Dockerfile` and `railway.json`. Connect the repo in Railway and it deploys automatically. `PORT` is set by Railway at runtime.
