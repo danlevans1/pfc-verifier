@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from app.api_v1 import router as v1_router
 from app.db import fetch_receipt, init_db, save_receipt
 from app.generator import generate_receipt
 from app.ui import INDEX_HTML
@@ -20,7 +21,13 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="PFC Receipt Verifier", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="PFC Receipt Verifier",
+    version="0.1.0",
+    description="Verify and generate PFC receipts with Ed25519 signatures. OpenAPI docs at /docs.",
+    lifespan=lifespan,
+)
+app.include_router(v1_router)
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -341,3 +341,79 @@ def test_generate_url_rendered_in_ui():
     page = client.get("/").text
     assert 'id="share-url"' in page
     assert "Shareable Verification URL" in page
+
+
+# ── V7: Developer API v1 tests ────────────────────────────────────────────────
+
+def test_api_generate_returns_receipt_and_url():
+    r = client.post("/api/v1/receipts/generate", json={})
+    assert r.status_code == 200
+    body = r.json()
+    assert "receipt" in body
+    assert "privateKey" in body
+    assert "url" in body
+    assert body["url"].startswith("/r/")
+    for field in ("receiptId", "timestamp", "payloadHash", "publicKey", "signature"):
+        assert field in body["receipt"]
+
+
+def test_api_generate_with_payload():
+    r = client.post(
+        "/api/v1/receipts/generate",
+        json={"payload": {"agent": "beta", "action": "log"}},
+    )
+    assert r.status_code == 200
+    ph = r.json()["receipt"]["payloadHash"]
+    assert len(ph) == 64
+    assert all(c in "0123456789abcdef" for c in ph)
+
+
+def test_api_generate_stores_receipt():
+    body = client.post("/api/v1/receipts/generate", json={}).json()
+    receipt_id = body["receipt"]["receiptId"]
+    r = client.get(f"/api/v1/receipts/{receipt_id}")
+    assert r.status_code == 200
+    assert r.json()["receipt"]["receiptId"] == receipt_id
+
+
+def test_api_verify_valid_receipt():
+    receipt = client.post("/api/v1/receipts/generate", json={}).json()["receipt"]
+    r = client.post("/api/v1/receipts/verify", json=receipt)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["valid"] is True
+    assert body["checks"]["cryptographicSignature"] == "PASS"
+    assert body["errors"] == []
+
+
+def test_api_verify_invalid_receipt():
+    r = client.post(
+        "/api/v1/receipts/verify",
+        json={
+            "receiptId": "x",
+            "timestamp": "2026-06-22T00:00:00Z",
+            "payloadHash": "not-valid",
+            "signature": "abc",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["valid"] is False
+    assert body["checks"]["payloadHash"] == "FAIL"
+
+
+def test_api_lookup_returns_receipt_and_verification():
+    gen = client.post("/api/v1/receipts/generate", json={}).json()
+    receipt_id = gen["receipt"]["receiptId"]
+    r = client.get(f"/api/v1/receipts/{receipt_id}")
+    assert r.status_code == 200
+    body = r.json()
+    assert "receipt" in body
+    assert "verification" in body
+    assert body["verification"]["valid"] is True
+    assert body["verification"]["checks"]["cryptographicSignature"] == "PASS"
+
+
+def test_api_lookup_not_found():
+    r = client.get("/api/v1/receipts/no-such-receipt")
+    assert r.status_code == 404
