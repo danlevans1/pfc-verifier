@@ -417,3 +417,38 @@ def test_api_lookup_returns_receipt_and_verification():
 def test_api_lookup_not_found():
     r = client.get("/api/v1/receipts/no-such-receipt")
     assert r.status_code == 404
+
+
+# ── V8: authority identity layer tests ───────────────────────────────────────
+
+def test_authority_in_generated_receipt():
+    body = client.post("/generate", json={}).json()
+    auth = body["receipt"]["authority"]
+    assert auth["name"] == "Prime Form Calculus"
+    assert auth["authorityId"] == "pfc-main"
+    assert auth["website"] == "https://primeformcalculus.com"
+
+
+def test_authority_passed_through_in_verify_response():
+    receipt = client.post("/generate", json={}).json()["receipt"]
+    body = client.post("/verify", json=receipt).json()
+    assert body["valid"] is True
+    assert body["authority"]["name"] == "Prime Form Calculus"
+
+
+def test_legacy_receipt_without_authority_unaffected():
+    body = client.post("/verify", json=VALID_RECEIPT).json()
+    assert body["valid"] is True
+    assert "authority" not in body
+
+
+def test_api_generate_includes_authority():
+    body = client.post("/api/v1/receipts/generate", json={}).json()
+    auth = body["receipt"]["authority"]
+    assert auth["authorityId"] == "pfc-main"
+    assert auth["website"] == "https://primeformcalculus.com"
+
+
+def test_root_has_authority_section():
+    r = client.get("/")
+    assert 'id="authority-section"' in r.text

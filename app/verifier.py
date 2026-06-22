@@ -74,4 +74,7 @@ def verify_receipt(data: Dict[str, Any]) -> Dict[str, Any]:
         errors.extend(crypto_errors)
 
     valid = all(v == "PASS" for v in checks.values())
-    return {"valid": valid, "checks": checks, "errors": errors}
+    result: Dict[str, Any] = {"valid": valid, "checks": checks, "errors": errors}
+    if "authority" in data:
+        result["authority"] = data["authority"]
+    return result
