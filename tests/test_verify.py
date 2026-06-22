@@ -6,10 +6,17 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
+import app.db as _db
 from app.main import app
 from app.verifier import canonical_payload
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def fresh_db(tmp_path, monkeypatch):
+    monkeypatch.setattr(_db, "DB_PATH", str(tmp_path / "test.db"))
+    _db.init_db()
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -274,3 +281,53 @@ def test_root_has_payload_json_editor():
 def test_root_has_verify_generated_btn():
     r = client.get("/")
     assert 'id="verify-generated-btn"' in r.text
+
+
+# ── V6: registry & shareable URL tests ───────────────────────────────────────
+
+def test_store_and_fetch_receipt():
+    r = client.post("/receipts", json=VALID_RECEIPT)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["receiptId"] == VALID_RECEIPT["receiptId"]
+    assert body["url"] == f"/r/{VALID_RECEIPT['receiptId']}"
+
+    r2 = client.get(f"/receipts/{VALID_RECEIPT['receiptId']}")
+    assert r2.status_code == 200
+    assert r2.json()["receiptId"] == VALID_RECEIPT["receiptId"]
+
+
+def test_receipt_not_found():
+    r = client.get("/receipts/does-not-exist")
+    assert r.status_code == 404
+
+
+def test_generate_auto_stores_receipt():
+    body = client.post("/generate", json={}).json()
+    receipt_id = body["receipt"]["receiptId"]
+    r = client.get(f"/receipts/{receipt_id}")
+    assert r.status_code == 200
+    assert r.json()["receiptId"] == receipt_id
+
+
+def test_generate_returns_url():
+    body = client.post("/generate", json={}).json()
+    assert "url" in body
+    assert body["url"] == f"/r/{body['receipt']['receiptId']}"
+
+
+def test_receipt_page_returns_html():
+    r = client.get(f"/r/{VALID_RECEIPT['receiptId']}")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "PFC Verifier" in r.text
+
+
+def test_root_has_share_url_element():
+    r = client.get("/")
+    assert 'id="share-url"' in r.text
+
+
+def test_root_has_copy_url_btn():
+    r = client.get("/")
+    assert 'id="copy-url-btn"' in r.text
