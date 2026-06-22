@@ -151,6 +151,70 @@ r = httpx.post("https://<your-railway-url>/verify", json=receipt)
 print(r.json())
 ```
 
+## Developer API (v1)
+
+All v1 endpoints are versioned under `/api/v1`, return JSON, and are fully documented in the interactive Swagger UI at `/docs`.
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/receipts/generate` | Generate, sign, and store a receipt |
+| `POST` | `/api/v1/receipts/verify` | Verify a receipt JSON |
+| `GET` | `/api/v1/receipts/{receiptId}` | Look up a stored receipt + verification result |
+
+### curl examples
+
+**Generate a signed receipt**
+
+```bash
+curl -s -X POST https://<your-railway-url>/api/v1/receipts/generate \
+  -H "Content-Type: application/json" \
+  -d '{"payload": {"agent": "alpha", "action": "transfer"}}' | jq .
+```
+
+**Verify a receipt**
+
+```bash
+curl -s -X POST https://<your-railway-url>/api/v1/receipts/verify \
+  -H "Content-Type: application/json" \
+  -d @receipt.json | jq .
+```
+
+**Look up a stored receipt**
+
+```bash
+curl -s https://<your-railway-url>/api/v1/receipts/receipt-abc123 | jq .
+```
+
+### Python example
+
+```python
+import requests
+
+BASE = "https://<your-railway-url>"
+
+# 1. Generate a signed receipt
+resp = requests.post(
+    f"{BASE}/api/v1/receipts/generate",
+    json={"payload": {"agent": "alpha", "action": "transfer"}},
+)
+data = resp.json()
+receipt    = data["receipt"]
+private_key = data["privateKey"]   # store securely
+share_url  = BASE + data["url"]    # e.g. https://.../r/receipt-abc123
+
+# 2. Verify the receipt
+resp = requests.post(f"{BASE}/api/v1/receipts/verify", json=receipt)
+print(resp.json())
+# {"valid": True, "checks": {"schema": "PASS", ..., "cryptographicSignature": "PASS"}, "errors": []}
+
+# 3. Look up a stored receipt by ID
+resp = requests.get(f"{BASE}/api/v1/receipts/{receipt['receiptId']}")
+print(resp.json())
+# {"receipt": {...}, "verification": {"valid": True, "checks": {...}, "errors": []}}
+```
+
 ## Running locally
 
 ```bash
