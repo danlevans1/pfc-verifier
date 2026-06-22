@@ -142,7 +142,13 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .warning { font-size: 0.8rem; color: #e3b341; margin-bottom: 0.5rem; }
 
-    /* ── Shareable URL row ──────────────────────────────────────── */
+    /* ── Shareable URL section ──────────────────────────────────── */
+    .share-section {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid #30363d;
+    }
+
     .share-row {
       display: flex;
       align-items: center;
@@ -150,26 +156,20 @@ INDEX_HTML = """<!DOCTYPE html>
       background: #0d1117;
       border: 1px solid #30363d;
       border-radius: 6px;
-      padding: 0.5rem 0.75rem;
-      margin-top: 0.75rem;
-    }
-
-    .share-label {
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #8b949e;
-      white-space: nowrap;
+      padding: 0.6rem 0.75rem;
+      margin-top: 0.4rem;
     }
 
     #share-url {
       flex: 1;
       color: #58a6ff;
       font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-      font-size: 0.82rem;
+      font-size: 0.85rem;
       word-break: break-all;
+      text-decoration: none;
     }
+
+    #share-url:hover { text-decoration: underline; }
 
     /* ── Verify result ──────────────────────────────────────────── */
     .result-card { display: none; }
@@ -364,10 +364,12 @@ INDEX_HTML = """<!DOCTYPE html>
         <div class="code-block"><pre id="generated-receipt"></pre></div>
         <button id="copy-receipt-btn" class="btn-secondary">Copy JSON</button>
 
-        <div class="share-row">
-          <span class="share-label">Share</span>
-          <span id="share-url"></span>
-          <button id="copy-url-btn" class="btn-sm">Copy URL</button>
+        <div class="share-section">
+          <p class="section-label">Shareable Verification URL</p>
+          <div class="share-row">
+            <a id="share-url" href="#" target="_blank"></a>
+            <button id="copy-url-btn" class="btn-sm">Copy URL</button>
+          </div>
         </div>
 
         <button id="verify-generated-btn">Verify Generated Receipt</button>
@@ -518,7 +520,8 @@ INDEX_HTML = """<!DOCTYPE html>
         _lastUrl = window.location.origin + data.url;
         generatedReceipt.textContent = JSON.stringify(data.receipt, null, 2);
         generatedPrivKey.textContent = data.privateKey;
-        shareUrlEl.textContent = _lastUrl;
+        shareUrlEl.textContent = data.url;
+        shareUrlEl.href = _lastUrl;
         generatorResult.hidden = false;
       } catch (e) {
         genError.textContent = 'Request failed: ' + e.message;

@@ -331,3 +331,13 @@ def test_root_has_share_url_element():
 def test_root_has_copy_url_btn():
     r = client.get("/")
     assert 'id="copy-url-btn"' in r.text
+
+
+def test_generate_url_rendered_in_ui():
+    """Generated receipt URL is /r/{id} and the page labels it as Shareable Verification URL."""
+    body = client.post("/generate", json={}).json()
+    assert body["url"] == f"/r/{body['receipt']['receiptId']}"
+
+    page = client.get("/").text
+    assert 'id="share-url"' in page
+    assert "Shareable Verification URL" in page
