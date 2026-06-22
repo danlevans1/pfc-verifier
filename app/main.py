@@ -1,16 +1,26 @@
 import os
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from app.db import fetch_receipt, init_db, save_receipt
 from app.generator import generate_receipt
 from app.ui import INDEX_HTML
 from app.verifier import verify_receipt
 
-app = FastAPI(title="PFC Receipt Verifier", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="PFC Receipt Verifier", version="0.1.0", lifespan=lifespan)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -38,12 +48,39 @@ class GenerateRequest(BaseModel):
 
 @app.post("/generate")
 def generate(req: GenerateRequest = GenerateRequest()):
-    return generate_receipt(
+    result = generate_receipt(
         receipt_id=req.receiptId,
         timestamp=req.timestamp,
         payload=req.payload,
         payload_hash=req.payloadHash,
     )
+    receipt = result["receipt"]
+    save_receipt(receipt, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    result["url"] = f"/r/{receipt['receiptId']}"
+    return result
+
+
+@app.post("/receipts")
+async def store_receipt(request: Request):
+    data: Dict[str, Any] = await request.json()
+    receipt_id = data.get("receiptId")
+    if not receipt_id:
+        raise HTTPException(status_code=400, detail="receiptId is required")
+    save_receipt(data, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    return {"receiptId": receipt_id, "url": f"/r/{receipt_id}"}
+
+
+@app.get("/receipts/{receipt_id}")
+def get_receipt(receipt_id: str):
+    data = fetch_receipt(receipt_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    return data
+
+
+@app.get("/r/{receipt_id}", response_class=HTMLResponse)
+def receipt_page(receipt_id: str):
+    return INDEX_HTML
 
 
 if __name__ == "__main__":

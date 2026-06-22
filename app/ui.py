@@ -86,13 +86,12 @@ INDEX_HTML = """<!DOCTYPE html>
       transition: border-color 0.15s;
     }
 
-    textarea           { height: 280px; resize: vertical; }
-    textarea.short     { height: 120px; }
+    textarea          { height: 280px; resize: vertical; }
+    textarea.short    { height: 120px; }
 
     textarea:focus, input[type="text"]:focus { border-color: #58a6ff; }
 
     .field-row { margin-bottom: 0.75rem; }
-
     .field-row label { font-size: 0.75rem; margin-bottom: 0.3rem; }
 
     /* ── Buttons ────────────────────────────────────────────────── */
@@ -124,13 +123,52 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .btn-secondary:hover { background: #30363d; }
 
+    .btn-sm {
+      width: auto;
+      display: inline-block;
+      padding: 0.3rem 0.75rem;
+      font-size: 0.8rem;
+      margin: 0;
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+      border-radius: 4px;
+    }
+
+    .btn-sm:hover { background: #30363d; }
+
     /* ── Inline messages ────────────────────────────────────────── */
     .inline-error { color: #f85149; font-size: 0.85rem; margin-top: 0.5rem; }
 
-    .warning {
-      font-size: 0.8rem;
-      color: #e3b341;
-      margin-bottom: 0.5rem;
+    .warning { font-size: 0.8rem; color: #e3b341; margin-bottom: 0.5rem; }
+
+    /* ── Shareable URL row ──────────────────────────────────────── */
+    .share-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      margin-top: 0.75rem;
+    }
+
+    .share-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #8b949e;
+      white-space: nowrap;
+    }
+
+    #share-url {
+      flex: 1;
+      color: #58a6ff;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.82rem;
+      word-break: break-all;
     }
 
     /* ── Verify result ──────────────────────────────────────────── */
@@ -325,6 +363,13 @@ INDEX_HTML = """<!DOCTYPE html>
         <p class="section-label" style="margin-bottom:0.5rem">Generated Receipt</p>
         <div class="code-block"><pre id="generated-receipt"></pre></div>
         <button id="copy-receipt-btn" class="btn-secondary">Copy JSON</button>
+
+        <div class="share-row">
+          <span class="share-label">Share</span>
+          <span id="share-url"></span>
+          <button id="copy-url-btn" class="btn-sm">Copy URL</button>
+        </div>
+
         <button id="verify-generated-btn">Verify Generated Receipt</button>
 
         <p class="section-label" style="margin-top:1.25rem;margin-bottom:0.25rem">Private Key</p>
@@ -428,10 +473,13 @@ INDEX_HTML = """<!DOCTYPE html>
     var generatedReceipt = document.getElementById('generated-receipt');
     var generatedPrivKey = document.getElementById('generated-private-key');
     var copyReceiptBtn   = document.getElementById('copy-receipt-btn');
+    var shareUrlEl       = document.getElementById('share-url');
+    var copyUrlBtn       = document.getElementById('copy-url-btn');
     var verifyGenBtn     = document.getElementById('verify-generated-btn');
     var genError         = document.getElementById('gen-error');
 
     var _lastReceipt = null;
+    var _lastUrl     = null;
 
     generateBtn.addEventListener('click', async function() {
       genError.hidden = true;
@@ -467,8 +515,10 @@ INDEX_HTML = """<!DOCTYPE html>
         });
         var data = await res.json();
         _lastReceipt = data.receipt;
+        _lastUrl = window.location.origin + data.url;
         generatedReceipt.textContent = JSON.stringify(data.receipt, null, 2);
         generatedPrivKey.textContent = data.privateKey;
+        shareUrlEl.textContent = _lastUrl;
         generatorResult.hidden = false;
       } catch (e) {
         genError.textContent = 'Request failed: ' + e.message;
@@ -486,13 +536,40 @@ INDEX_HTML = """<!DOCTYPE html>
       setTimeout(function() { copyReceiptBtn.textContent = 'Copy JSON'; }, 1500);
     });
 
-    // Populate verify textarea, switch tab, auto-trigger verification
+    copyUrlBtn.addEventListener('click', function() {
+      if (!_lastUrl) return;
+      navigator.clipboard.writeText(_lastUrl);
+      copyUrlBtn.textContent = 'Copied!';
+      setTimeout(function() { copyUrlBtn.textContent = 'Copy URL'; }, 1500);
+    });
+
     verifyGenBtn.addEventListener('click', function() {
       if (!_lastReceipt) return;
       textarea.value = JSON.stringify(_lastReceipt, null, 2);
       document.querySelector('[data-tab="verify"]').click();
       verifyBtn.click();
     });
+
+    // ── Auto-load receipt when visiting /r/{receiptId} ────────────
+    (function() {
+      var m = window.location.pathname.match(/^\\/r\\/([^\\/]+)$/);
+      if (!m) return;
+      var receiptId = decodeURIComponent(m[1]);
+      document.querySelector('[data-tab="verify"]').click();
+      fetch('/receipts/' + encodeURIComponent(receiptId))
+        .then(function(r) {
+          if (!r.ok) throw new Error('Receipt not found');
+          return r.json();
+        })
+        .then(function(receipt) {
+          textarea.value = JSON.stringify(receipt, null, 2);
+          verifyBtn.click();
+        })
+        .catch(function(e) {
+          jsonError.textContent = 'Could not load receipt: ' + e.message;
+          jsonError.hidden = false;
+        });
+    })();
   </script>
 </body>
 </html>"""
