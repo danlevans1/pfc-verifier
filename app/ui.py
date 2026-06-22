@@ -242,6 +242,33 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .error-item:last-child { border-bottom: none; }
 
+    /* ── Authority section ──────────────────────────────────────── */
+    .authority-section { margin-top: 1rem; }
+
+    .authority-grid { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.4rem; }
+
+    .authority-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.4rem 0.75rem;
+      background: #0d1117;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+
+    .authority-key {
+      font-family: monospace;
+      color: #8b949e;
+      min-width: 100px;
+      flex-shrink: 0;
+    }
+
+    .authority-val { color: #c9d1d9; }
+
+    .authority-link { color: #58a6ff; text-decoration: none; }
+    .authority-link:hover { text-decoration: underline; }
+
     /* ── Raw / code panels ──────────────────────────────────────── */
     .raw-panel {
       margin-top: 1rem;
@@ -321,6 +348,11 @@ INDEX_HTML = """<!DOCTYPE html>
         <p id="verified-at" class="verified-at"></p>
 
         <div class="checks-grid" id="checks"></div>
+
+        <div id="authority-section" class="authority-section" hidden>
+          <p class="section-label">Authority</p>
+          <div id="authority-grid" class="authority-grid"></div>
+        </div>
 
         <div id="errors-section" class="errors-section" hidden>
           <p class="section-label">Errors</p>
@@ -454,6 +486,26 @@ INDEX_HTML = """<!DOCTYPE html>
           '<span class="check-name">' + name + '</span>' +
           '<span class="badge ' + cls + '">' + status + '</span>';
         checksEl.appendChild(row);
+      }
+
+      var authoritySection = document.getElementById('authority-section');
+      var authorityGrid    = document.getElementById('authority-grid');
+      if (result.authority && typeof result.authority === 'object') {
+        authorityGrid.innerHTML = Object.entries(result.authority)
+          .map(function(e) {
+            var key = e[0], val = String(e[1]);
+            var isUrl = val.startsWith('http');
+            return '<div class="authority-row">' +
+              '<span class="authority-key">' + key + '</span>' +
+              (isUrl
+                ? '<a class="authority-val authority-link" href="' + val + '" target="_blank">' + val + '</a>'
+                : '<span class="authority-val">' + val + '</span>') +
+              '</div>';
+          })
+          .join('');
+        authoritySection.hidden = false;
+      } else {
+        authoritySection.hidden = true;
       }
 
       if (result.errors && result.errors.length > 0) {

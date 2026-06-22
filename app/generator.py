@@ -9,6 +9,12 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app.verifier import canonical_payload
 
+AUTHORITY = {
+    "name": "Prime Form Calculus",
+    "authorityId": "pfc-main",
+    "website": "https://primeformcalculus.com",
+}
+
 
 def _b64url(b: bytes) -> str:
     return urlsafe_b64encode(b).rstrip(b"=").decode()
@@ -42,6 +48,7 @@ def generate_receipt(
         "publicKey": _b64url(private_key.public_key().public_bytes_raw()),
     }
     receipt["signature"] = _b64url(private_key.sign(canonical_payload(receipt)))
+    receipt["authority"] = AUTHORITY
 
     return {
         "receipt": receipt,

@@ -45,12 +45,19 @@ class ApiVerifyRequest(BaseModel):
 
 # ── Response models ───────────────────────────────────────────────────────────
 
+class AuthorityModel(BaseModel):
+    name: str
+    authorityId: str
+    website: str
+
+
 class VerificationResult(BaseModel):
     valid: bool = Field(..., description="True only when every check passes")
-    checks: Dict[str, str] = Field(
-        ..., description="Per-check result: PASS or FAIL"
-    )
+    checks: Dict[str, str] = Field(..., description="Per-check result: PASS or FAIL")
     errors: List[str] = Field(..., description="Human-readable error messages")
+    authority: Optional[AuthorityModel] = Field(
+        None, description="Authority metadata, present when the receipt carries an authority block"
+    )
 
 
 class ApiGenerateResponse(BaseModel):
