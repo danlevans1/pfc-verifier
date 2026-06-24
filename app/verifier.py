@@ -3,6 +3,8 @@ import re
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from typing import Any, Dict, List, Tuple
 
+from app.authority_registry import resolve_status
+
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
@@ -75,6 +77,6 @@ def verify_receipt(data: Dict[str, Any]) -> Dict[str, Any]:
 
     valid = all(v == "PASS" for v in checks.values())
     result: Dict[str, Any] = {"valid": valid, "checks": checks, "errors": errors}
-    if "authority" in data:
-        result["authority"] = data["authority"]
+    if "authority" in data and isinstance(data["authority"], dict):
+        result["authority"] = {**data["authority"], "status": resolve_status(data["authority"])}
     return result

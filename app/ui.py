@@ -219,8 +219,9 @@ INDEX_HTML = """<!DOCTYPE html>
       letter-spacing: 0.04em;
     }
 
-    .badge.pass { background: #0d2818; color: #3fb950; border: 1px solid #238636; }
-    .badge.fail { background: #2d0f0f; color: #f85149; border: 1px solid #da3633; }
+    .badge.pass    { background: #0d2818; color: #3fb950; border: 1px solid #238636; }
+    .badge.fail    { background: #2d0f0f; color: #f85149; border: 1px solid #da3633; }
+    .badge.unknown { background: #2d2200; color: #e3b341; border: 1px solid #9e6a03; }
 
     .errors-section { margin-top: 1rem; }
 
@@ -494,13 +495,18 @@ INDEX_HTML = """<!DOCTYPE html>
         authorityGrid.innerHTML = Object.entries(result.authority)
           .map(function(e) {
             var key = e[0], val = String(e[1]);
-            var isUrl = val.startsWith('http');
+            var content;
+            if (key === 'status') {
+              var cls = val === 'trusted' ? 'pass' : val === 'untrusted' ? 'fail' : 'unknown';
+              content = '<span class="badge ' + cls + '">' + val + '</span>';
+            } else if (val.startsWith('http')) {
+              content = '<a class="authority-val authority-link" href="' + val + '" target="_blank">' + val + '</a>';
+            } else {
+              content = '<span class="authority-val">' + val + '</span>';
+            }
             return '<div class="authority-row">' +
               '<span class="authority-key">' + key + '</span>' +
-              (isUrl
-                ? '<a class="authority-val authority-link" href="' + val + '" target="_blank">' + val + '</a>'
-                : '<span class="authority-val">' + val + '</span>') +
-              '</div>';
+              content + '</div>';
           })
           .join('');
         authoritySection.hidden = false;
