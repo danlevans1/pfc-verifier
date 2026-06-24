@@ -452,3 +452,41 @@ def test_api_generate_includes_authority():
 def test_root_has_authority_section():
     r = client.get("/")
     assert 'id="authority-section"' in r.text
+
+
+# ── V9: authority registry tests ──────────────────────────────────────────────
+
+def test_authority_registry_list():
+    r = client.get("/api/v1/authorities")
+    assert r.status_code == 200
+    entries = r.json()
+    assert isinstance(entries, list)
+    assert any(a["authorityId"] == "pfc-main" for a in entries)
+    assert any(a["trusted"] is True for a in entries)
+
+
+def test_authority_registry_get_known():
+    r = client.get("/api/v1/authorities/pfc-main")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["authorityId"] == "pfc-main"
+    assert body["name"] == "Prime Form Calculus"
+    assert body["trusted"] is True
+
+
+def test_authority_registry_get_unknown():
+    r = client.get("/api/v1/authorities/no-such-authority")
+    assert r.status_code == 404
+
+
+def test_known_authority_resolves_trusted():
+    receipt = client.post("/generate", json={}).json()["receipt"]
+    body = client.post("/verify", json=receipt).json()
+    assert body["authority"]["status"] == "trusted"
+
+
+def test_unknown_authority_resolves_unknown():
+    receipt = client.post("/generate", json={}).json()["receipt"]
+    receipt["authority"]["authorityId"] = "unregistered-org"
+    body = client.post("/verify", json=receipt).json()
+    assert body["authority"]["status"] == "unknown"

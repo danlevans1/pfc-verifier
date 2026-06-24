@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.authority_registry import get_authority, list_authorities
 from app.db import fetch_receipt, save_receipt
 from app.generator import generate_receipt
 from app.verifier import verify_receipt
@@ -46,9 +47,16 @@ class ApiVerifyRequest(BaseModel):
 # ── Response models ───────────────────────────────────────────────────────────
 
 class AuthorityModel(BaseModel):
-    name: str
     authorityId: str
+    name: str
     website: str
+    trusted: Optional[bool] = Field(
+        None, description="True when this authority is registered as trusted"
+    )
+    status: Optional[str] = Field(
+        None,
+        description="Trust status resolved during verification: trusted | untrusted | unknown",
+    )
 
 
 class VerificationResult(BaseModel):
@@ -134,3 +142,26 @@ def api_lookup(receipt_id: str) -> ApiLookupResponse:
         receipt=receipt,
         verification=VerificationResult(**verification),
     )
+
+
+@router.get(
+    "/authorities",
+    response_model=List[AuthorityModel],
+    summary="List all registered authorities",
+    description="Returns every authority in the registry.",
+)
+def api_list_authorities() -> List[AuthorityModel]:
+    return [AuthorityModel(**a) for a in list_authorities()]
+
+
+@router.get(
+    "/authorities/{authority_id}",
+    response_model=AuthorityModel,
+    summary="Look up an authority by ID",
+    description="Returns the authority entry or 404 if not registered.",
+)
+def api_get_authority(authority_id: str) -> AuthorityModel:
+    entry = get_authority(authority_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Authority not found")
+    return AuthorityModel(**entry)
