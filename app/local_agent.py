@@ -595,6 +595,12 @@ def read_project_file(
             if not target.is_file():
                 raise ValueError("path is not a file")
 
+            max_file_bytes = 1_000_000
+            file_size = target.stat().st_size
+
+            if file_size > max_file_bytes:
+                raise ValueError("file exceeds maximum readable size")
+
             content = target.read_text(encoding="utf-8")
 
             record["status"] = "executed"

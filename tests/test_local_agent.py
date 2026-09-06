@@ -155,3 +155,29 @@ def test_corrupted_replay_state_fails_closed(tmp_path, monkeypatch):
 
     assert result["decision"] == "deny"
     assert result["reason"] == "authorization replay state is unreadable"
+
+
+def test_read_project_file_blocks_oversized_file(tmp_path, monkeypatch):
+    import app.local_agent as local_agent
+
+    large_file = tmp_path / "large.txt"
+    large_file.write_bytes(b"x" * 1_000_001)
+
+    monkeypatch.setattr(
+        local_agent,
+        "PFC_PROJECT_ROOT",
+        tmp_path,
+    )
+
+    authorization = local_agent.make_tool_authorization_record(
+        "read_project_file",
+        True,
+    )
+
+    result = local_agent.read_project_file(
+        "large.txt",
+        authorization,
+    )
+
+    assert result["status"] == "denied"
+    assert result["reason"] == "file exceeds maximum readable size"
