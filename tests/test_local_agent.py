@@ -33,3 +33,15 @@ def test_authorization_cannot_be_reused_for_another_tool():
 
     assert result["status"] == "denied"
     assert result["reason"] == "authorization does not match tool"
+
+
+def test_local_agent_receipt_integration():
+    from app.local_agent import run_local_agent_with_receipt
+
+    result = run_local_agent_with_receipt(
+        "Reply with exactly: PFC_TEST_RECEIPT_OK"
+    )
+
+    assert result["execution"]["output"]["content"] == "PFC_TEST_RECEIPT_OK"
+    assert result["verification"]["valid"] is True
+    assert result["verification"]["checks"]["cryptographicSignature"] == "PASS"

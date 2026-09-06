@@ -219,3 +219,19 @@ def list_current_directory(authorization_record: dict) -> dict:
     record["record_sha256"] = _sha256(record)
 
     return record
+
+
+def run_local_agent_with_receipt(prompt: str, request_type: str = "model") -> dict:
+    from app.generator import generate_receipt
+    from app.verifier import verify_receipt
+
+    execution = run_local_agent(prompt, request_type=request_type)
+    bundle = generate_receipt(payload=execution)
+    receipt = bundle["receipt"]
+    verification = verify_receipt(receipt)
+
+    return {
+        "execution": execution,
+        "receipt": receipt,
+        "verification": verification,
+    }
