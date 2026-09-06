@@ -279,9 +279,21 @@ For reading one text file inside the PFC project, use:
   "reason": "short explanation"
 }}
 
+For creating or replacing one text file inside the PFC project, use:
+{{
+  "tool": "write_project_file",
+  "path": "relative/path/from/project/root",
+  "content": "exact full text content to write",
+  "reason": "short explanation"
+}}
+
+For write_project_file, include the complete final file content.
+Do not use patches, diffs, placeholders, or summaries.
+
 The only tools you are allowed to propose are:
 list_current_directory
 read_project_file
+write_project_file
 
 Never use an absolute path.
 Never use .. to leave the project root.
@@ -311,6 +323,7 @@ User request:
 ALLOWED_TOOLS = {
     "list_current_directory",
     "read_project_file",
+    "write_project_file",
 }
 
 
@@ -374,6 +387,40 @@ def validate_tool_proposal(proposal_result: dict) -> dict:
                 "decision": "deny",
                 "tool": tool_name,
                 "reason": "path is not an existing project file",
+            }
+
+    if tool_name == "write_project_file":
+        relative_path = proposal.get("path")
+        content = proposal.get("content")
+
+        if not isinstance(relative_path, str) or not relative_path.strip():
+            return {
+                "decision": "deny",
+                "tool": tool_name,
+                "reason": "write_project_file requires a relative path",
+            }
+
+        if not isinstance(content, str):
+            return {
+                "decision": "deny",
+                "tool": tool_name,
+                "reason": "write_project_file requires exact text content",
+            }
+
+        if len(content.encode("utf-8")) > 1_000_000:
+            return {
+                "decision": "deny",
+                "tool": tool_name,
+                "reason": "write content exceeds maximum size",
+            }
+
+        try:
+            validate_writable_project_path(relative_path)
+        except ValueError as exc:
+            return {
+                "decision": "deny",
+                "tool": tool_name,
+                "reason": str(exc),
             }
 
     return {
@@ -459,6 +506,20 @@ def complete_governed_action(prepared_action: dict, approved: bool) -> dict:
             )
             execution = read_project_file(
                 relative_path,
+                authorization_record,
+            )
+        elif tool_name == "write_project_file":
+            proposal = (
+                prepared_action
+                .get("proposal", {})
+                .get("proposal", {})
+            )
+            relative_path = proposal.get("path")
+            content = proposal.get("content")
+
+            execution = write_project_file(
+                relative_path,
+                content,
                 authorization_record,
             )
         else:
@@ -711,3 +772,112 @@ def validate_listable_project_path(relative_path: str) -> Path:
         raise ValueError("path is not a directory")
 
     return target
+
+
+def validate_writable_project_path(relative_path: str) -> Path:
+    requested = Path(relative_path)
+
+    if requested.is_absolute():
+        raise ValueError("absolute paths are not allowed")
+
+    if not relative_path.strip():
+        raise ValueError("write_project_file requires a relative path")
+
+    target = resolve_pfc_path(relative_path)
+    relative = target.relative_to(PFC_PROJECT_ROOT)
+
+    for part in relative.parts:
+        if part in SENSITIVE_PROJECT_PATHS or part.startswith(".env"):
+            raise ValueError("access to sensitive project path is denied")
+
+    if target == PFC_PROJECT_ROOT:
+        raise ValueError("project root cannot be written as a file")
+
+    if target.exists() and target.is_dir():
+        raise ValueError("path is a directory")
+
+    parent = target.parent
+
+    if not parent.is_dir():
+        raise ValueError("parent directory does not exist")
+
+    return target
+
+
+def write_project_file(
+    relative_path: str,
+    content: str,
+    authorization_record: dict,
+) -> dict:
+    tool_name = "write_project_file"
+    decision = run_governed_tool(tool_name, authorization_record)
+
+    record = {
+        "tool_execution_id": str(uuid.uuid4()),
+        "tool": tool_name,
+        "authorization_id": authorization_record.get("authorization_id"),
+        "authorization_status": decision["status"],
+        "executed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if decision["status"] != "authorized":
+        record["status"] = "denied"
+        record["reason"] = decision.get("reason")
+    else:
+        temp_path = None
+
+        try:
+            if not isinstance(content, str):
+                raise ValueError("write_project_file requires exact text content")
+
+            content_bytes = content.encode("utf-8")
+
+            if len(content_bytes) > 1_000_000:
+                raise ValueError("write content exceeds maximum size")
+
+            target = validate_writable_project_path(relative_path)
+
+            existed_before = target.exists()
+            previous_sha256 = None
+
+            if existed_before:
+                previous_sha256 = hashlib.sha256(
+                    target.read_bytes()
+                ).hexdigest()
+
+            content_sha256 = hashlib.sha256(content_bytes).hexdigest()
+
+            temp_path = target.parent / (
+                f".{target.name}.pfc-{uuid.uuid4().hex}.tmp"
+            )
+
+            with temp_path.open("xb") as temp_file:
+                temp_file.write(content_bytes)
+                temp_file.flush()
+                import os
+                os.fsync(temp_file.fileno())
+
+            temp_path.replace(target)
+
+            record["status"] = "executed"
+            record["result"] = {
+                "path": str(target),
+                "operation": "replace" if existed_before else "create",
+                "bytes_written": len(content_bytes),
+                "content_sha256": content_sha256,
+                "previous_sha256": previous_sha256,
+            }
+
+        except (ValueError, OSError, UnicodeEncodeError) as exc:
+            record["status"] = "denied"
+            record["reason"] = str(exc)
+
+        finally:
+            if temp_path is not None and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
+
+    record["record_sha256"] = _sha256(record)
+    return record

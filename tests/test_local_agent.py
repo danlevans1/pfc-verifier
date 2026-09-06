@@ -47,13 +47,32 @@ def test_local_agent_receipt_integration():
     assert result["verification"]["checks"]["cryptographicSignature"] == "PASS"
 
 
+def _prepared_directory_listing():
+    return {
+        "status": "awaiting_human_approval",
+        "tool": "list_current_directory",
+        "proposal": {
+            "status": "proposed",
+            "proposal": {
+                "tool": "list_current_directory",
+                "path": ".",
+                "reason": "test",
+            },
+            "model": "test-model",
+            "provider": "test-provider",
+        },
+        "validation": {
+            "decision": "allow",
+            "tool": "list_current_directory",
+            "reason": "tool is permitted for authorization review",
+        },
+    }
+
+
 def test_governed_action_executes_only_after_approval():
-    from app.local_agent import prepare_governed_action, complete_governed_action
+    from app.local_agent import complete_governed_action
 
-    prepared = prepare_governed_action(
-        "Show me what files are in the current PFC project directory."
-    )
-
+    prepared = _prepared_directory_listing()
     result = complete_governed_action(prepared, True)
 
     assert result["status"] == "executed"
@@ -63,12 +82,9 @@ def test_governed_action_executes_only_after_approval():
 
 
 def test_governed_action_denial_prevents_execution():
-    from app.local_agent import prepare_governed_action, complete_governed_action
+    from app.local_agent import complete_governed_action
 
-    prepared = prepare_governed_action(
-        "Show me what files are in the current PFC project directory."
-    )
-
+    prepared = _prepared_directory_listing()
     result = complete_governed_action(prepared, False)
 
     assert result["status"] == "denied"
@@ -292,3 +308,145 @@ def test_directory_proposal_requires_relative_path():
 
     assert result["decision"] == "deny"
     assert result["reason"] == "absolute paths are not allowed"
+
+
+def test_write_project_file_denied_without_approval(tmp_path, monkeypatch):
+    from pathlib import Path
+    import app.local_agent as local_agent
+
+    monkeypatch.setattr(local_agent, "PFC_PROJECT_ROOT", tmp_path)
+
+    prepared = {
+        "status": "awaiting_human_approval",
+        "tool": "write_project_file",
+        "proposal": {
+            "status": "proposed",
+            "proposal": {
+                "tool": "write_project_file",
+                "path": "denied.txt",
+                "content": "must not be written",
+                "reason": "test",
+            },
+        },
+        "validation": {
+            "decision": "allow",
+            "tool": "write_project_file",
+            "reason": "tool is permitted for authorization review",
+        },
+    }
+
+    result = local_agent.complete_governed_action(prepared, False)
+
+    assert result["status"] == "denied"
+    assert not (tmp_path / "denied.txt").exists()
+
+
+def test_write_project_file_creates_exact_content(tmp_path, monkeypatch):
+    import app.local_agent as local_agent
+
+    monkeypatch.setattr(local_agent, "PFC_PROJECT_ROOT", tmp_path)
+
+    prepared = {
+        "status": "awaiting_human_approval",
+        "tool": "write_project_file",
+        "proposal": {
+            "status": "proposed",
+            "proposal": {
+                "tool": "write_project_file",
+                "path": "created.txt",
+                "content": "exact approved content",
+                "reason": "test",
+            },
+        },
+        "validation": {
+            "decision": "allow",
+            "tool": "write_project_file",
+            "reason": "tool is permitted for authorization review",
+        },
+    }
+
+    result = local_agent.complete_governed_action(prepared, True)
+
+    assert result["status"] == "executed"
+    assert (tmp_path / "created.txt").read_text() == "exact approved content"
+    assert result["execution"]["result"]["operation"] == "create"
+    assert result["verification"]["valid"] is True
+
+
+def test_write_project_file_blocks_sensitive_path(tmp_path, monkeypatch):
+    import app.local_agent as local_agent
+
+    monkeypatch.setattr(local_agent, "PFC_PROJECT_ROOT", tmp_path)
+    (tmp_path / ".env").write_text("SECRET=test")
+
+    authorization = local_agent.make_tool_authorization_record(
+        "write_project_file",
+        True,
+    )
+
+    result = local_agent.write_project_file(
+        ".env",
+        "changed",
+        authorization,
+    )
+
+    assert result["status"] == "denied"
+    assert result["reason"] == "access to sensitive project path is denied"
+    assert (tmp_path / ".env").read_text() == "SECRET=test"
+
+
+def test_write_proposal_blocks_path_escape(tmp_path, monkeypatch):
+    import app.local_agent as local_agent
+
+    monkeypatch.setattr(local_agent, "PFC_PROJECT_ROOT", tmp_path)
+
+    proposal = {
+        "status": "proposed",
+        "proposal": {
+            "tool": "write_project_file",
+            "path": "../escape.txt",
+            "content": "blocked",
+            "reason": "test",
+        },
+    }
+
+    result = local_agent.validate_tool_proposal(proposal)
+
+    assert result["decision"] == "deny"
+    assert result["reason"] == "path escapes PFC project root"
+
+
+def test_write_authorization_is_bound_to_exact_content():
+    from app.local_agent import (
+        make_bound_tool_authorization_record,
+        verify_bound_authorization,
+    )
+
+    prepared = {
+        "status": "awaiting_human_approval",
+        "tool": "write_project_file",
+        "proposal": {
+            "status": "proposed",
+            "proposal": {
+                "tool": "write_project_file",
+                "path": "example.txt",
+                "content": "approved content",
+                "reason": "test",
+            },
+        },
+    }
+
+    authorization = make_bound_tool_authorization_record(
+        prepared,
+        True,
+    )
+
+    prepared["proposal"]["proposal"]["content"] = "CHANGED AFTER APPROVAL"
+
+    result = verify_bound_authorization(
+        prepared,
+        authorization,
+    )
+
+    assert result["decision"] == "deny"
+    assert result["reason"] == "authorization does not match proposal"
