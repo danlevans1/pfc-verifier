@@ -196,7 +196,10 @@ def execute_governed_tool(tool_name: str, authorization_record: dict) -> dict:
     return record
 
 
-def list_current_directory(authorization_record: dict) -> dict:
+def list_current_directory(
+    authorization_record: dict,
+    relative_path: str = ".",
+) -> dict:
     tool_name = "list_current_directory"
 
     decision = run_governed_tool(tool_name, authorization_record)
@@ -217,13 +220,17 @@ def list_current_directory(authorization_record: dict) -> dict:
     else:
         import os
 
-        directory = resolve_pfc_path(".")
+        try:
+            directory = validate_listable_project_path(relative_path)
 
-        record["status"] = "executed"
-        record["result"] = {
-            "path": str(directory),
-            "files": sorted(os.listdir(directory)),
-        }
+            record["status"] = "executed"
+            record["result"] = {
+                "path": str(directory),
+                "files": sorted(os.listdir(directory)),
+            }
+        except (ValueError, OSError) as exc:
+            record["status"] = "denied"
+            record["reason"] = str(exc)
 
     record["record_sha256"] = _sha256(record)
 
@@ -255,11 +262,15 @@ Do not claim that any action was performed.
 
 Return ONLY valid JSON.
 
-For listing the project directory, use:
+For listing a directory inside the PFC project, use:
 {{
   "tool": "list_current_directory",
+  "path": "relative/path/from/project/root",
   "reason": "short explanation"
 }}
+
+When listing the PFC project root itself, the path MUST be ".".
+Never use an empty path.
 
 For reading one text file inside the PFC project, use:
 {{
@@ -319,6 +330,25 @@ def validate_tool_proposal(proposal_result: dict) -> dict:
             "tool": tool_name,
             "reason": "tool is not in PFC allowlist",
         }
+
+    if tool_name == "list_current_directory":
+        relative_path = proposal.get("path")
+
+        if not isinstance(relative_path, str) or not relative_path.strip():
+            return {
+                "decision": "deny",
+                "tool": tool_name,
+                "reason": "list_current_directory requires a relative path",
+            }
+
+        try:
+            validate_listable_project_path(relative_path)
+        except ValueError as exc:
+            return {
+                "decision": "deny",
+                "tool": tool_name,
+                "reason": str(exc),
+            }
 
     if tool_name == "read_project_file":
         relative_path = proposal.get("path")
@@ -410,7 +440,16 @@ def complete_governed_action(prepared_action: dict, approved: bool) -> dict:
                 "reason": consumption["reason"],
             }
         elif tool_name == "list_current_directory":
-            execution = list_current_directory(authorization_record)
+            relative_path = (
+                prepared_action
+                .get("proposal", {})
+                .get("proposal", {})
+                .get("path")
+            )
+            execution = list_current_directory(
+                authorization_record,
+                relative_path,
+            )
         elif tool_name == "read_project_file":
             relative_path = (
                 prepared_action
@@ -635,6 +674,7 @@ SENSITIVE_PROJECT_PATHS = {
     ".venv",
     ".env",
     ".pfc_consumed_authorizations.json",
+    ".pfc_consumed_authorizations.lock",
 }
 
 
@@ -648,10 +688,26 @@ def validate_readable_project_path(relative_path: str) -> Path:
     relative = target.relative_to(PFC_PROJECT_ROOT)
 
     for part in relative.parts:
-        if part in SENSITIVE_PROJECT_PATHS:
+        if part in SENSITIVE_PROJECT_PATHS or part.startswith(".env"):
             raise ValueError("access to sensitive project path is denied")
 
-    if relative.name.startswith(".env"):
-        raise ValueError("access to sensitive project path is denied")
+    return target
+
+
+def validate_listable_project_path(relative_path: str) -> Path:
+    requested = Path(relative_path)
+
+    if requested.is_absolute():
+        raise ValueError("absolute paths are not allowed")
+
+    target = resolve_pfc_path(relative_path)
+    relative = target.relative_to(PFC_PROJECT_ROOT)
+
+    for part in relative.parts:
+        if part in SENSITIVE_PROJECT_PATHS or part.startswith(".env"):
+            raise ValueError("access to sensitive project path is denied")
+
+    if not target.is_dir():
+        raise ValueError("path is not a directory")
 
     return target

@@ -239,3 +239,56 @@ print(json.dumps(result))
     decisions = sorted(result["decision"] for result in results)
 
     assert decisions == ["allow", "deny"]
+
+
+def test_list_project_subdirectory_executes_inside_project():
+    from app.local_agent import make_tool_authorization_record, list_current_directory
+
+    authorization = make_tool_authorization_record(
+        "list_current_directory",
+        True,
+    )
+
+    result = list_current_directory(
+        authorization,
+        "app",
+    )
+
+    assert result["status"] == "executed"
+    assert result["result"]["path"].endswith("/app")
+    assert "local_agent.py" in result["result"]["files"]
+
+
+def test_list_project_subdirectory_blocks_sensitive_path():
+    from app.local_agent import make_tool_authorization_record, list_current_directory
+
+    authorization = make_tool_authorization_record(
+        "list_current_directory",
+        True,
+    )
+
+    result = list_current_directory(
+        authorization,
+        ".git",
+    )
+
+    assert result["status"] == "denied"
+    assert result["reason"] == "access to sensitive project path is denied"
+
+
+def test_directory_proposal_requires_relative_path():
+    from app.local_agent import validate_tool_proposal
+
+    proposal = {
+        "status": "proposed",
+        "proposal": {
+            "tool": "list_current_directory",
+            "path": "/tmp",
+            "reason": "test",
+        },
+    }
+
+    result = validate_tool_proposal(proposal)
+
+    assert result["decision"] == "deny"
+    assert result["reason"] == "absolute paths are not allowed"
