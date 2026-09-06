@@ -45,3 +45,33 @@ def test_local_agent_receipt_integration():
     assert result["execution"]["output"]["content"] == "PFC_TEST_RECEIPT_OK"
     assert result["verification"]["valid"] is True
     assert result["verification"]["checks"]["cryptographicSignature"] == "PASS"
+
+
+def test_governed_action_executes_only_after_approval():
+    from app.local_agent import prepare_governed_action, complete_governed_action
+
+    prepared = prepare_governed_action(
+        "Show me what files are in the current PFC project directory."
+    )
+
+    result = complete_governed_action(prepared, True)
+
+    assert result["status"] == "executed"
+    assert result["execution"]["status"] == "executed"
+    assert "files" in result["execution"]["result"]
+    assert result["verification"]["valid"] is True
+
+
+def test_governed_action_denial_prevents_execution():
+    from app.local_agent import prepare_governed_action, complete_governed_action
+
+    prepared = prepare_governed_action(
+        "Show me what files are in the current PFC project directory."
+    )
+
+    result = complete_governed_action(prepared, False)
+
+    assert result["status"] == "denied"
+    assert result["execution"]["status"] == "denied"
+    assert "result" not in result["execution"]
+    assert result["verification"]["valid"] is True

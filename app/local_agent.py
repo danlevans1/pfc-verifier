@@ -235,3 +235,135 @@ def run_local_agent_with_receipt(prompt: str, request_type: str = "model") -> di
         "receipt": receipt,
         "verification": verification,
     }
+
+
+def propose_tool_action(user_request: str) -> dict:
+    prompt = f"""
+You are a local planning model inside a governed PFC system.
+
+Do not execute tools.
+Do not claim that any action was performed.
+
+Return ONLY valid JSON with exactly these fields:
+{{
+  "tool": "list_current_directory",
+  "reason": "short explanation"
+}}
+
+The only tool you are allowed to propose is:
+list_current_directory
+
+User request:
+{user_request}
+"""
+
+    result = ask_ollama(prompt)
+
+    try:
+        proposal = json.loads(result["content"])
+    except Exception:
+        return {
+            "status": "invalid_proposal",
+            "raw_output": result["content"],
+        }
+
+    return {
+        "status": "proposed",
+        "proposal": proposal,
+        "model": result["model"],
+        "provider": result["provider"],
+    }
+
+
+ALLOWED_TOOLS = {
+    "list_current_directory",
+}
+
+
+def validate_tool_proposal(proposal_result: dict) -> dict:
+    if proposal_result.get("status") != "proposed":
+        return {
+            "decision": "deny",
+            "reason": "no valid model proposal",
+        }
+
+    proposal = proposal_result.get("proposal", {})
+    tool_name = proposal.get("tool")
+
+    if tool_name not in ALLOWED_TOOLS:
+        return {
+            "decision": "deny",
+            "tool": tool_name,
+            "reason": "tool is not in PFC allowlist",
+        }
+
+    return {
+        "decision": "allow",
+        "tool": tool_name,
+        "reason": "tool is permitted for authorization review",
+    }
+
+
+def prepare_governed_action(user_request: str) -> dict:
+    proposal = propose_tool_action(user_request)
+    validation = validate_tool_proposal(proposal)
+
+    if validation["decision"] != "allow":
+        return {
+            "status": "denied_by_pfc",
+            "proposal": proposal,
+            "validation": validation,
+        }
+
+    return {
+        "status": "awaiting_human_approval",
+        "proposal": proposal,
+        "validation": validation,
+        "tool": validation["tool"],
+    }
+
+
+def complete_governed_action(prepared_action: dict, approved: bool) -> dict:
+    from app.generator import generate_receipt
+    from app.verifier import verify_receipt
+
+    if prepared_action.get("status") != "awaiting_human_approval":
+        return {
+            "status": "denied",
+            "reason": "action is not awaiting human approval",
+        }
+
+    tool_name = prepared_action.get("tool")
+
+    authorization_record = make_tool_authorization_record(
+        tool_name,
+        approved,
+    )
+
+    if tool_name == "list_current_directory":
+        execution = list_current_directory(authorization_record)
+    else:
+        execution = {
+            "tool": tool_name,
+            "status": "denied",
+            "reason": "no execution handler registered",
+        }
+
+    receipt_bundle = generate_receipt(
+        payload={
+            "prepared_action": prepared_action,
+            "authorization": authorization_record,
+            "execution": execution,
+        }
+    )
+
+    receipt = receipt_bundle["receipt"]
+
+    return {
+        "status": execution["status"],
+        "prepared_action": prepared_action,
+        "authorization": authorization_record,
+        "execution": execution,
+        "receipt": receipt,
+        "verification": verify_receipt(receipt),
+    }
