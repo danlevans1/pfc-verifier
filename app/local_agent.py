@@ -335,12 +335,23 @@ def complete_governed_action(prepared_action: dict, approved: bool) -> dict:
 
     tool_name = prepared_action.get("tool")
 
-    authorization_record = make_tool_authorization_record(
-        tool_name,
+    authorization_record = make_bound_tool_authorization_record(
+        prepared_action,
         approved,
     )
 
-    if tool_name == "list_current_directory":
+    binding = verify_bound_authorization(
+        prepared_action,
+        authorization_record,
+    )
+
+    if binding["decision"] != "allow":
+        execution = {
+            "tool": tool_name,
+            "status": "denied",
+            "reason": binding["reason"],
+        }
+    elif tool_name == "list_current_directory":
         execution = list_current_directory(authorization_record)
     else:
         execution = {
@@ -366,4 +377,59 @@ def complete_governed_action(prepared_action: dict, approved: bool) -> dict:
         "execution": execution,
         "receipt": receipt,
         "verification": verify_receipt(receipt),
+    }
+
+
+def proposal_hash(prepared_action: dict) -> str:
+    proposal = prepared_action.get("proposal", {})
+    return _sha256(proposal)
+
+
+def make_bound_tool_authorization_record(
+    prepared_action: dict,
+    approved: bool,
+) -> dict:
+    tool_name = prepared_action.get("tool")
+
+    record = {
+        "authorization_id": str(uuid.uuid4()),
+        "tool": tool_name,
+        "proposal_sha256": proposal_hash(prepared_action),
+        "authorization": authorize_tool(tool_name, approved),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    record["record_sha256"] = _sha256(record)
+
+    return record
+
+
+def verify_bound_authorization(
+    prepared_action: dict,
+    authorization_record: dict,
+) -> dict:
+    if not verify_record(authorization_record):
+        return {
+            "decision": "deny",
+            "reason": "invalid authorization record",
+        }
+
+    expected = proposal_hash(prepared_action)
+    supplied = authorization_record.get("proposal_sha256")
+
+    if supplied != expected:
+        return {
+            "decision": "deny",
+            "reason": "authorization does not match proposal",
+        }
+
+    if authorization_record.get("tool") != prepared_action.get("tool"):
+        return {
+            "decision": "deny",
+            "reason": "authorization does not match tool",
+        }
+
+    return {
+        "decision": "allow",
+        "reason": "authorization matches proposal",
     }
