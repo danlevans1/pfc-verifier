@@ -212,9 +212,12 @@ def list_current_directory(authorization_record: dict) -> dict:
     else:
         import os
 
+        directory = resolve_pfc_path(".")
+
         record["status"] = "executed"
         record["result"] = {
-            "files": sorted(os.listdir(".")),
+            "path": str(directory),
+            "files": sorted(os.listdir(directory)),
         }
 
     record["record_sha256"] = _sha256(record)
@@ -494,3 +497,15 @@ def consume_authorization(authorization_record: dict) -> dict:
         "decision": "allow",
         "reason": "authorization consumed",
     }
+
+
+PFC_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def resolve_pfc_path(relative_path: str = ".") -> Path:
+    candidate = (PFC_PROJECT_ROOT / relative_path).resolve()
+
+    if candidate != PFC_PROJECT_ROOT and PFC_PROJECT_ROOT not in candidate.parents:
+        raise ValueError("path escapes PFC project root")
+
+    return candidate
