@@ -80,3 +80,36 @@ def verify_receipt(data: Dict[str, Any]) -> Dict[str, Any]:
     if "authority" in data and isinstance(data["authority"], dict):
         result["authority"] = {**data["authority"], "status": resolve_status(data["authority"])}
     return result
+
+
+def verify_receipt_payload(data: Dict[str, Any], payload: Any) -> Dict[str, Any]:
+    """Verify the receipt and prove that it corresponds to the supplied payload."""
+    import hashlib
+
+    result = verify_receipt(data)
+
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+    expected_hash = hashlib.sha256(canonical).hexdigest()
+    supplied_hash = data.get("payloadHash")
+
+    result["checks"]["payloadIntegrity"] = (
+        "PASS" if supplied_hash == expected_hash else "FAIL"
+    )
+
+    if supplied_hash != expected_hash:
+        result["errors"].append(
+            "payload does not match the receipt payloadHash"
+        )
+
+    result["valid"] = all(
+        value == "PASS"
+        for value in result["checks"].values()
+    )
+
+    return result

@@ -360,15 +360,16 @@ def complete_governed_action(prepared_action: dict, approved: bool) -> dict:
             "reason": "no execution handler registered",
         }
 
-    receipt_bundle = generate_receipt(
-        payload={
-            "prepared_action": prepared_action,
-            "authorization": authorization_record,
-            "execution": execution,
-        }
-    )
+    receipt_payload = {
+        "prepared_action": prepared_action,
+        "authorization": authorization_record,
+        "execution": execution,
+    }
 
+    receipt_bundle = generate_receipt(payload=receipt_payload)
     receipt = receipt_bundle["receipt"]
+
+    from app.verifier import verify_receipt_payload
 
     return {
         "status": execution["status"],
@@ -376,7 +377,7 @@ def complete_governed_action(prepared_action: dict, approved: bool) -> dict:
         "authorization": authorization_record,
         "execution": execution,
         "receipt": receipt,
-        "verification": verify_receipt(receipt),
+        "verification": verify_receipt_payload(receipt, receipt_payload),
     }
 
 
