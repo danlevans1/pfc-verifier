@@ -13,3 +13,4 @@ venv/
 .venv/
 
 .pfc_consumed_authorizations.json
+.pfc_consumed_authorizations.lock

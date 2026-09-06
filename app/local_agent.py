@@ -3,7 +3,9 @@ from pathlib import Path
 
 PFC_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _CONSUMED_AUTHORIZATIONS_FILE = PFC_PROJECT_ROOT / ".pfc_consumed_authorizations.json"
+_AUTHORIZATION_LOCK_FILE = PFC_PROJECT_ROOT / ".pfc_consumed_authorizations.lock"
 import hashlib
+import fcntl
 import json
 import uuid
 
@@ -537,26 +539,36 @@ def consume_authorization(authorization_record: dict) -> dict:
         }
 
     try:
-        consumed = _load_consumed_authorizations()
-    except RuntimeError as exc:
+        with _AUTHORIZATION_LOCK_FILE.open("a+") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+            try:
+                consumed = _load_consumed_authorizations()
+            except RuntimeError as exc:
+                return {
+                    "decision": "deny",
+                    "reason": str(exc),
+                }
+
+            if authorization_id in consumed:
+                return {
+                    "decision": "deny",
+                    "reason": "authorization has already been consumed",
+                }
+
+            consumed.add(authorization_id)
+            _save_consumed_authorizations(consumed)
+
+            return {
+                "decision": "allow",
+                "reason": "authorization consumed",
+            }
+
+    except OSError:
         return {
             "decision": "deny",
-            "reason": str(exc),
+            "reason": "authorization replay lock is unavailable",
         }
-
-    if authorization_id in consumed:
-        return {
-            "decision": "deny",
-            "reason": "authorization has already been consumed",
-        }
-
-    consumed.add(authorization_id)
-    _save_consumed_authorizations(consumed)
-
-    return {
-        "decision": "allow",
-        "reason": "authorization consumed",
-    }
 
 
 

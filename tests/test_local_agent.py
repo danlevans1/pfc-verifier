@@ -181,3 +181,61 @@ def test_read_project_file_blocks_oversized_file(tmp_path, monkeypatch):
 
     assert result["status"] == "denied"
     assert result["reason"] == "file exceeds maximum readable size"
+
+
+def test_concurrent_authorization_consumption_allows_only_one(tmp_path):
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    state_file = tmp_path / ".pfc_consumed_authorizations.json"
+    lock_file = tmp_path / ".pfc_consumed_authorizations.lock"
+
+    script = f'''
+import json
+from pathlib import Path
+import app.local_agent as local_agent
+
+local_agent._CONSUMED_AUTHORIZATIONS_FILE = Path(r"{state_file}")
+local_agent._AUTHORIZATION_LOCK_FILE = Path(r"{lock_file}")
+
+result = local_agent.consume_authorization(
+    {{"authorization_id": "CONCURRENT-TEST"}}
+)
+
+print(json.dumps(result))
+'''
+
+    project_root = Path(__file__).resolve().parent.parent
+
+    first = subprocess.Popen(
+        [sys.executable, "-c", script],
+        cwd=project_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    second = subprocess.Popen(
+        [sys.executable, "-c", script],
+        cwd=project_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    out1, err1 = first.communicate()
+    out2, err2 = second.communicate()
+
+    assert first.returncode == 0, err1
+    assert second.returncode == 0, err2
+
+    results = [
+        json.loads(out1.strip()),
+        json.loads(out2.strip()),
+    ]
+
+    decisions = sorted(result["decision"] for result in results)
+
+    assert decisions == ["allow", "deny"]
