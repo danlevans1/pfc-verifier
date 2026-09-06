@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from pathlib import Path
 import hashlib
 import json
 import uuid
@@ -445,7 +446,28 @@ def verify_bound_authorization(
     }
 
 
-_CONSUMED_AUTHORIZATIONS = set()
+_CONSUMED_AUTHORIZATIONS_FILE = Path(".pfc_consumed_authorizations.json")
+
+
+def _load_consumed_authorizations() -> set:
+    if not _CONSUMED_AUTHORIZATIONS_FILE.exists():
+        return set()
+
+    try:
+        data = json.loads(_CONSUMED_AUTHORIZATIONS_FILE.read_text())
+    except (json.JSONDecodeError, OSError):
+        return set()
+
+    if not isinstance(data, list):
+        return set()
+
+    return set(data)
+
+
+def _save_consumed_authorizations(authorizations: set) -> None:
+    _CONSUMED_AUTHORIZATIONS_FILE.write_text(
+        json.dumps(sorted(authorizations), indent=2)
+    )
 
 
 def consume_authorization(authorization_record: dict) -> dict:
@@ -457,13 +479,16 @@ def consume_authorization(authorization_record: dict) -> dict:
             "reason": "authorization has no id",
         }
 
-    if authorization_id in _CONSUMED_AUTHORIZATIONS:
+    consumed = _load_consumed_authorizations()
+
+    if authorization_id in consumed:
         return {
             "decision": "deny",
             "reason": "authorization has already been consumed",
         }
 
-    _CONSUMED_AUTHORIZATIONS.add(authorization_id)
+    consumed.add(authorization_id)
+    _save_consumed_authorizations(consumed)
 
     return {
         "decision": "allow",

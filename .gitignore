@@ -11,3 +11,5 @@ build/
 .env.*
 venv/
 .venv/
+
+.pfc_consumed_authorizations.json
