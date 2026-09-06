@@ -96,3 +96,42 @@ def test_authorization_cannot_be_consumed_twice():
     assert first["decision"] == "allow"
     assert second["decision"] == "deny"
     assert second["reason"] == "authorization has already been consumed"
+
+
+def test_read_project_file_allows_file_inside_project():
+    from app.local_agent import make_tool_authorization_record, read_project_file
+
+    authorization = make_tool_authorization_record("read_project_file", True)
+    result = read_project_file("README.md", authorization)
+
+    assert result["status"] == "executed"
+    assert result["result"]["path"].endswith("/README.md")
+    assert result["result"]["content"]
+
+
+def test_read_project_file_blocks_path_escape():
+    from app.local_agent import make_tool_authorization_record, read_project_file
+
+    authorization = make_tool_authorization_record("read_project_file", True)
+    result = read_project_file("../.zshrc", authorization)
+
+    assert result["status"] == "denied"
+    assert result["reason"] == "path escapes PFC project root"
+
+
+def test_file_read_proposal_blocks_path_escape():
+    from app.local_agent import validate_tool_proposal
+
+    proposal = {
+        "status": "proposed",
+        "proposal": {
+            "tool": "read_project_file",
+            "path": "../.zshrc",
+            "reason": "test",
+        },
+    }
+
+    result = validate_tool_proposal(proposal)
+
+    assert result["decision"] == "deny"
+    assert result["reason"] == "path escapes PFC project root"
