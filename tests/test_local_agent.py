@@ -75,3 +75,24 @@ def test_governed_action_denial_prevents_execution():
     assert result["execution"]["status"] == "denied"
     assert "result" not in result["execution"]
     assert result["verification"]["valid"] is True
+
+
+def test_authorization_cannot_be_consumed_twice():
+    from app.local_agent import (
+        prepare_governed_action,
+        make_bound_tool_authorization_record,
+        consume_authorization,
+    )
+
+    prepared = prepare_governed_action(
+        "Show me what files are in the current PFC project directory."
+    )
+
+    authorization = make_bound_tool_authorization_record(prepared, True)
+
+    first = consume_authorization(authorization)
+    second = consume_authorization(authorization)
+
+    assert first["decision"] == "allow"
+    assert second["decision"] == "deny"
+    assert second["reason"] == "authorization has already been consumed"

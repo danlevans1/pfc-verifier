@@ -351,14 +351,23 @@ def complete_governed_action(prepared_action: dict, approved: bool) -> dict:
             "status": "denied",
             "reason": binding["reason"],
         }
-    elif tool_name == "list_current_directory":
-        execution = list_current_directory(authorization_record)
     else:
-        execution = {
-            "tool": tool_name,
-            "status": "denied",
-            "reason": "no execution handler registered",
-        }
+        consumption = consume_authorization(authorization_record)
+
+        if consumption["decision"] != "allow":
+            execution = {
+                "tool": tool_name,
+                "status": "denied",
+                "reason": consumption["reason"],
+            }
+        elif tool_name == "list_current_directory":
+            execution = list_current_directory(authorization_record)
+        else:
+            execution = {
+                "tool": tool_name,
+                "status": "denied",
+                "reason": "no execution handler registered",
+            }
 
     receipt_payload = {
         "prepared_action": prepared_action,
@@ -433,4 +442,30 @@ def verify_bound_authorization(
     return {
         "decision": "allow",
         "reason": "authorization matches proposal",
+    }
+
+
+_CONSUMED_AUTHORIZATIONS = set()
+
+
+def consume_authorization(authorization_record: dict) -> dict:
+    authorization_id = authorization_record.get("authorization_id")
+
+    if not authorization_id:
+        return {
+            "decision": "deny",
+            "reason": "authorization has no id",
+        }
+
+    if authorization_id in _CONSUMED_AUTHORIZATIONS:
+        return {
+            "decision": "deny",
+            "reason": "authorization has already been consumed",
+        }
+
+    _CONSUMED_AUTHORIZATIONS.add(authorization_id)
+
+    return {
+        "decision": "allow",
+        "reason": "authorization consumed",
     }
