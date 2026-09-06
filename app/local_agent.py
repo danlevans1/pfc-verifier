@@ -326,7 +326,7 @@ def validate_tool_proposal(proposal_result: dict) -> dict:
             }
 
         try:
-            target = resolve_pfc_path(relative_path)
+            target = validate_readable_project_path(relative_path)
         except ValueError as exc:
             return {
                 "decision": "deny",
@@ -582,7 +582,7 @@ def read_project_file(
         record["reason"] = decision.get("reason")
     else:
         try:
-            target = resolve_pfc_path(relative_path)
+            target = validate_readable_project_path(relative_path)
 
             if not target.is_file():
                 raise ValueError("path is not a file")
@@ -602,3 +602,30 @@ def read_project_file(
     record["record_sha256"] = _sha256(record)
 
     return record
+
+
+SENSITIVE_PROJECT_PATHS = {
+    ".git",
+    ".venv",
+    ".env",
+    ".pfc_consumed_authorizations.json",
+}
+
+
+def validate_readable_project_path(relative_path: str) -> Path:
+    requested = Path(relative_path)
+
+    if requested.is_absolute():
+        raise ValueError("absolute paths are not allowed")
+
+    target = resolve_pfc_path(relative_path)
+    relative = target.relative_to(PFC_PROJECT_ROOT)
+
+    for part in relative.parts:
+        if part in SENSITIVE_PROJECT_PATHS:
+            raise ValueError("access to sensitive project path is denied")
+
+    if relative.name.startswith(".env"):
+        raise ValueError("access to sensitive project path is denied")
+
+    return target
