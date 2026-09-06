@@ -512,11 +512,11 @@ def _load_consumed_authorizations() -> set:
 
     try:
         data = json.loads(_CONSUMED_AUTHORIZATIONS_FILE.read_text())
-    except (json.JSONDecodeError, OSError):
-        return set()
+    except (json.JSONDecodeError, OSError) as exc:
+        raise RuntimeError("authorization replay state is unreadable") from exc
 
     if not isinstance(data, list):
-        return set()
+        raise RuntimeError("authorization replay state is invalid")
 
     return set(data)
 
@@ -536,7 +536,13 @@ def consume_authorization(authorization_record: dict) -> dict:
             "reason": "authorization has no id",
         }
 
-    consumed = _load_consumed_authorizations()
+    try:
+        consumed = _load_consumed_authorizations()
+    except RuntimeError as exc:
+        return {
+            "decision": "deny",
+            "reason": str(exc),
+        }
 
     if authorization_id in consumed:
         return {

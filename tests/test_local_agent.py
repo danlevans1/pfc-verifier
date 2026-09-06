@@ -135,3 +135,23 @@ def test_file_read_proposal_blocks_path_escape():
 
     assert result["decision"] == "deny"
     assert result["reason"] == "path escapes PFC project root"
+
+
+def test_corrupted_replay_state_fails_closed(tmp_path, monkeypatch):
+    import app.local_agent as local_agent
+
+    state_file = tmp_path / ".pfc_consumed_authorizations.json"
+    state_file.write_text("{not valid json")
+
+    monkeypatch.setattr(
+        local_agent,
+        "_CONSUMED_AUTHORIZATIONS_FILE",
+        state_file,
+    )
+
+    result = local_agent.consume_authorization(
+        {"authorization_id": "TEST-CORRUPT-STATE"}
+    )
+
+    assert result["decision"] == "deny"
+    assert result["reason"] == "authorization replay state is unreadable"
