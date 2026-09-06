@@ -248,14 +248,27 @@ You are a local planning model inside a governed PFC system.
 Do not execute tools.
 Do not claim that any action was performed.
 
-Return ONLY valid JSON with exactly these fields:
+Return ONLY valid JSON.
+
+For listing the project directory, use:
 {{
   "tool": "list_current_directory",
   "reason": "short explanation"
 }}
 
-The only tool you are allowed to propose is:
+For reading one text file inside the PFC project, use:
+{{
+  "tool": "read_project_file",
+  "path": "relative/path/from/project/root",
+  "reason": "short explanation"
+}}
+
+The only tools you are allowed to propose are:
 list_current_directory
+read_project_file
+
+Never use an absolute path.
+Never use .. to leave the project root.
 
 User request:
 {user_request}
@@ -281,6 +294,7 @@ User request:
 
 ALLOWED_TOOLS = {
     "list_current_directory",
+    "read_project_file",
 }
 
 
@@ -300,6 +314,32 @@ def validate_tool_proposal(proposal_result: dict) -> dict:
             "tool": tool_name,
             "reason": "tool is not in PFC allowlist",
         }
+
+    if tool_name == "read_project_file":
+        relative_path = proposal.get("path")
+
+        if not isinstance(relative_path, str) or not relative_path.strip():
+            return {
+                "decision": "deny",
+                "tool": tool_name,
+                "reason": "read_project_file requires a relative path",
+            }
+
+        try:
+            target = resolve_pfc_path(relative_path)
+        except ValueError as exc:
+            return {
+                "decision": "deny",
+                "tool": tool_name,
+                "reason": str(exc),
+            }
+
+        if not target.is_file():
+            return {
+                "decision": "deny",
+                "tool": tool_name,
+                "reason": "path is not an existing project file",
+            }
 
     return {
         "decision": "allow",
@@ -366,6 +406,17 @@ def complete_governed_action(prepared_action: dict, approved: bool) -> dict:
             }
         elif tool_name == "list_current_directory":
             execution = list_current_directory(authorization_record)
+        elif tool_name == "read_project_file":
+            relative_path = (
+                prepared_action
+                .get("proposal", {})
+                .get("proposal", {})
+                .get("path")
+            )
+            execution = read_project_file(
+                relative_path,
+                authorization_record,
+            )
         else:
             execution = {
                 "tool": tool_name,
@@ -509,3 +560,45 @@ def resolve_pfc_path(relative_path: str = ".") -> Path:
         raise ValueError("path escapes PFC project root")
 
     return candidate
+
+
+def read_project_file(
+    relative_path: str,
+    authorization_record: dict,
+) -> dict:
+    tool_name = "read_project_file"
+    decision = run_governed_tool(tool_name, authorization_record)
+
+    record = {
+        "tool_execution_id": str(uuid.uuid4()),
+        "tool": tool_name,
+        "authorization_id": authorization_record.get("authorization_id"),
+        "authorization_status": decision["status"],
+        "executed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if decision["status"] != "authorized":
+        record["status"] = "denied"
+        record["reason"] = decision.get("reason")
+    else:
+        try:
+            target = resolve_pfc_path(relative_path)
+
+            if not target.is_file():
+                raise ValueError("path is not a file")
+
+            content = target.read_text(encoding="utf-8")
+
+            record["status"] = "executed"
+            record["result"] = {
+                "path": str(target),
+                "content": content,
+            }
+
+        except (ValueError, OSError, UnicodeDecodeError) as exc:
+            record["status"] = "denied"
+            record["reason"] = str(exc)
+
+    record["record_sha256"] = _sha256(record)
+
+    return record
