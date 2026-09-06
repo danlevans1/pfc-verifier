@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
 from pathlib import Path
+
+PFC_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_CONSUMED_AUTHORIZATIONS_FILE = PFC_PROJECT_ROOT / ".pfc_consumed_authorizations.json"
 import hashlib
 import json
 import uuid
@@ -500,7 +503,7 @@ def verify_bound_authorization(
     }
 
 
-_CONSUMED_AUTHORIZATIONS_FILE = Path(".pfc_consumed_authorizations.json")
+
 
 
 def _load_consumed_authorizations() -> set:
@@ -550,7 +553,6 @@ def consume_authorization(authorization_record: dict) -> dict:
     }
 
 
-PFC_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def resolve_pfc_path(relative_path: str = ".") -> Path:
